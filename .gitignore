@@ -1,0 +1,28 @@
+# agent / editor
+.claude/
+.agents/
+.cursor/
+.codex/
+.gemini/
+.vscode/
+.idea/
+
+# secrets
+.env
+.env.*
+!.env.example
+*.pem
+keystore*/
+
+# node
+node_modules/
+dist/
+.vercel/
+
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# os
+.DS_Store
