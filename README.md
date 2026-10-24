@@ -7,7 +7,7 @@ Built solo at Monad Blitz Jogja Vol 2, 24 Oct 2026.
 ## Live
 
 - Site: https://monad-ctf.vercel.app (custom domain pending)
-- Contract (Monad Testnet, chain 10143): `0xF1C4502869e75fc6F96992b538434784B7F459e5` — [explorer](https://testnet.monadexplorer.com/address/0xF1C4502869e75fc6F96992b538434784B7F459e5)
+- Contract (Monad Testnet, chain 10143): `0x7012271DdfC4A358F1BA8a916806473E1a944b14` — [explorer](https://testnet.monadexplorer.com/address/0x7012271DdfC4A358F1BA8a916806473E1a944b14)
 - Contract (Monad Mainnet, chain 143): _TBD_
 
 ## Run
