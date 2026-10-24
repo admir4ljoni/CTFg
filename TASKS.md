@@ -47,7 +47,7 @@ Times are targets from PLAN.md §10. Freeze 16:45.
 Default **no-go**. Go only if Slices 0–4 are all ticked and verified. Decision is final.
 
 ## Slice 5 — Mainnet, README, media (target 15:40 → 16:05)
-- [~] CUT: mainnet deploy (out of time) (chain 143) with `mainnet` keystore; README gets both addresses and explorer links
+- [~] CUT: mainnet deploy (out of time)
 - [x] README: live URL, how to run `contracts/` and `web/` from a fresh clone, how to play, how to create a challenge; tested in a fresh clone
 - [ ] 30s+ demo video: real solve, payout on explorer, leaderboard moves
 - [ ] 15–20s ad video from same footage
@@ -56,7 +56,7 @@ Default **no-go**. Go only if Slices 0–4 are all ticked and verified. Decision
 ## Slice 6 — Rehearsal and submission (16:05 → 16:40)
 - [ ] Pre-stage: funded challenge, fresh demo wallet with 1 MON, instance not yet deployed, two audience phones with 0.5 MON
 - [ ] Run the 3-minute demo twice on the live URL without errors
-- [ ] Verified badge visible on testnet and mainnet explorers; README links open in incognito
+- [ ] Verified badge visible on testnet explorer; README links open in incognito
 - [ ] **Submit at blitz.devnads.com** before 16:40
 - [ ] 16:40–16:45 change nothing
 
