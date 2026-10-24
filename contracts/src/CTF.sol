@@ -22,6 +22,9 @@ contract CTF {
     mapping(uint256 => Challenge) public challenges;
     mapping(uint256 => mapping(address => bool)) public solved;
     mapping(address => uint256) public score;
+    // Public RPCs cap eth_getLogs at 100 blocks, so the leaderboard reads these instead of replaying Solved.
+    address[] internal players;
+    mapping(uint256 => address) public firstBlood;
 
     event ChallengeCreated(uint256 indexed id, address indexed setter, uint32 points);
     event BountyAdded(uint256 indexed id, address indexed from, uint256 amount);
@@ -58,6 +61,10 @@ contract CTF {
         if (!ok) revert PayFailed();
     }
 
+    function getPlayers() external view returns (address[] memory) {
+        return players;
+    }
+
     function submit(uint256 id, bytes calldata sig) external {
         Challenge storage c = challenges[id];
         if (c.flagAddr == address(0)) revert Unknown();
@@ -66,6 +73,8 @@ contract CTF {
         if (ECDSA.recover(digest, sig) != c.flagAddr) revert WrongFlag();
 
         solved[id][msg.sender] = true;
+        if (score[msg.sender] == 0) players.push(msg.sender);
+        if (c.solves == 0) firstBlood[id] = msg.sender;
         c.solves++;
         score[msg.sender] += c.points;
         // First solver takes the bounty minus fee; later solvers get points only (bounty is 0).

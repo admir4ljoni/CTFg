@@ -87,6 +87,24 @@ contract CTFTest is Test {
         assertEq(ctf.fees(), 0);
     }
 
+    function testPlayersAndFirstBlood() public {
+        address second = makeAddr("second");
+        ctf.createChallenge(2, flagAddr, 50);
+        vm.prank(player);
+        ctf.submit(1, sign(flagKey, 1, player));
+        vm.prank(second);
+        ctf.submit(1, sign(flagKey, 1, second));
+        vm.prank(player);
+        ctf.submit(2, sign(flagKey, 2, player));
+
+        address[] memory p = ctf.getPlayers();
+        assertEq(p.length, 2); // player listed once despite two solves
+        assertEq(p[0], player);
+        assertEq(p[1], second);
+        assertEq(ctf.firstBlood(1), player);
+        assertEq(ctf.firstBlood(2), player);
+    }
+
     function testTopUpUnknownReverts() public {
         vm.expectRevert(CTF.Unknown.selector);
         ctf.topUp{value: 1}(99);
