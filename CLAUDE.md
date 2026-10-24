@@ -11,7 +11,7 @@ Monad CTF: an on-chain Capture The Flag platform. Players prove solves to a smar
 ```
 contracts/   Foundry project. src/CTF.sol (single contract), src/Vulnerable.sol (instance level), test/CTF.t.sol
 web/         Vite + React + TS, wagmi v3 + viem, shadcn + Tailwind, MetaMask injected connector only
-challenges/  challenges.json (id, title, category, points, text, hints) + files/. Numbers come from the contract, text from here
+web/challenges/  challenges.json (id, title, category, points, text, hints). Files go in web/public/files/. Numbers come from the contract, text from here
 README.md    must hold live URL, testnet + mainnet addresses, explorer links, run steps
 ```
 

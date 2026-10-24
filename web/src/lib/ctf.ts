@@ -1,6 +1,6 @@
 import { encodeAbiParameters, keccak256, parseAbi, toBytes } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import challengesJson from '../../../challenges/challenges.json'
+import challengesJson from '../../challenges/challenges.json'
 
 export const ctfAbi = parseAbi([
   'function createChallenge(uint256 id, address flagAddr, uint32 points)',

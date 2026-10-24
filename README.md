@@ -24,4 +24,4 @@ cd web && npm install && npm run dev
 
 - `contracts/` Foundry: `src/CTF.sol`, `src/Vulnerable.sol`, `test/CTF.t.sol`
 - `web/` Vite + React + wagmi, MetaMask only
-- `challenges/` challenge text and files; points and solves come from the contract
+- `web/challenges/` challenge text; files in `web/public/files/`; points and solves come from the contract
