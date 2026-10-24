@@ -10,8 +10,10 @@ export const config = createConfig({
   batch: { multicall: true },
   pollingInterval: 1_000,
   transports: {
+    // dRPC first: the official endpoint is 50 req/s per IP and a venue shares one IP.
     [monadTestnet.id]: fallback([
-      webSocket('wss://testnet-rpc.monad.xyz'),
+      webSocket('wss://monad-testnet.drpc.org'),
+      http('https://monad-testnet.drpc.org', { batch: true }),
       http('https://testnet-rpc.monad.xyz', { batch: true }),
     ]),
   },
