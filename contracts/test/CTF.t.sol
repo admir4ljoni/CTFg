@@ -24,7 +24,7 @@ contract CTFTest is Test {
         vm.prank(player);
         ctf.submit(1, sign(flagKey, 1, player));
         assertEq(ctf.score(player), 100);
-        (,, uint32 solves,) = ctf.challenges(1);
+        (,, uint32 solves,,) = ctf.challenges(1);
         assertEq(solves, 1);
     }
 
@@ -54,4 +54,43 @@ contract CTFTest is Test {
         vm.expectRevert(CTF.Exists.selector);
         ctf.createChallenge(1, flagAddr, 1);
     }
+
+    function testBountyPaysFirstSolverMinusFee() public {
+        ctf.createChallenge{value: 1 ether}(2, flagAddr, 50);
+        ctf.topUp{value: 1 ether}(2);
+        address second = makeAddr("second");
+
+        vm.prank(player);
+        ctf.submit(2, sign(flagKey, 2, player));
+        assertEq(player.balance, 1.9 ether); // 2 MON minus 5%
+        assertEq(ctf.fees(), 0.1 ether);
+
+        vm.prank(second);
+        ctf.submit(2, sign(flagKey, 2, second));
+        assertEq(second.balance, 0);
+        assertEq(ctf.score(second), 50);
+        assertEq(address(ctf).balance, 0.1 ether);
+    }
+
+    function testWithdrawFeesOwnerOnly() public {
+        ctf.createChallenge{value: 1 ether}(2, flagAddr, 50);
+        vm.prank(player);
+        ctf.submit(2, sign(flagKey, 2, player));
+
+        vm.prank(player);
+        vm.expectRevert(CTF.NotOwner.selector);
+        ctf.withdrawFees();
+
+        uint256 before = address(this).balance;
+        ctf.withdrawFees();
+        assertEq(address(this).balance - before, 0.05 ether);
+        assertEq(ctf.fees(), 0);
+    }
+
+    function testTopUpUnknownReverts() public {
+        vm.expectRevert(CTF.Unknown.selector);
+        ctf.topUp{value: 1}(99);
+    }
+
+    receive() external payable {}
 }

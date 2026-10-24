@@ -23,8 +23,8 @@ Times are targets from PLAN.md §10. Freeze 16:45.
 - [ ] **Post #1 on X** (tag @monad @monad_dev @geeky_kartikey, verified-contract screenshot)
 
 ## Slice 2 — Bounties pay MON per solve (target 14:45)
-- [ ] `CTF.sol`: `createChallenge` payable (value = bounty), `topUp(id)` payable, first solver receives bounty minus constant platform fee, `withdrawFees()` owner-only, checks-effects-interactions
-- [ ] Test: bounty lands in solver balance, fee accrues, second solver gets points but no MON
+- [x] `CTF.sol`: `createChallenge` payable (value = bounty), `topUp(id)` payable, first solver receives bounty minus constant platform fee, `withdrawFees()` owner-only, checks-effects-interactions
+- [x] Test: bounty lands in solver balance, fee accrues, second solver gets points but no MON
 - [ ] User redeploys + reverifies testnet; config + README updated
 - [ ] Web: bounty shown on list and detail; admin top-up; solve toast shows MON received with explorer link
 - [ ] Deployed; user funds a challenge with 1 MON and solves it from a second wallet on the live URL
