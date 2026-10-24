@@ -7,7 +7,7 @@ Built solo at Monad Blitz Jogja Vol 2, 24 Oct 2026.
 ## Live
 
 - Site: https://midratama.my.id (also https://monad-ctf.vercel.app)
-- Contract (Monad Testnet, chain 10143): `0xE5c9941a6B8bca21d1d0654f719bD0e595934D9e` — [explorer](https://testnet.monadexplorer.com/address/0xE5c9941a6B8bca21d1d0654f719bD0e595934D9e)
+- Contract (Monad Testnet, chain 10143): `0x260b6bfB91531E8b3Ad83dE2cdEae978FbC4e112` — [explorer](https://testnet.monadexplorer.com/address/0x260b6bfB91531E8b3Ad83dE2cdEae978FbC4e112)
 
 ## How it works
 
