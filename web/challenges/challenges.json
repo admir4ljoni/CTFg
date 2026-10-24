@@ -6,7 +6,9 @@
     "type": "flag",
     "points": 50,
     "text": "Welcome to Monad CTF. The flag is in the page source of this site. Format: MONAD{...}",
-    "hints": ["Ctrl+U"],
+    "hints": [
+      "Ctrl+U"
+    ],
     "files": []
   },
   {
@@ -16,7 +18,9 @@
     "type": "flag",
     "points": 100,
     "text": "ZBANQ{ebg13_vf_abg_rapelcgvba}",
-    "hints": ["Thirteen is a lucky number"],
+    "hints": [
+      "Thirteen is a lucky number"
+    ],
     "files": []
   },
   {
@@ -26,8 +30,12 @@
     "type": "flag",
     "points": 150,
     "text": "A small binary checks your input. Find what it wants.",
-    "hints": ["strings is a tool, not a hint"],
-    "files": ["strings-attached"]
+    "hints": [
+      "strings is a tool, not a hint"
+    ],
+    "files": [
+      "strings-attached"
+    ]
   },
   {
     "id": 4,
@@ -36,7 +44,21 @@
     "type": "instance",
     "points": 200,
     "text": "Deploy your personal Vault instance, drain it, then submit. The contract is verified on the explorer.",
-    "hints": ["Who is allowed to withdraw?"],
+    "hints": [
+      "Who is allowed to withdraw?"
+    ],
+    "files": []
+  },
+  {
+    "id": 13,
+    "title": "Bounty Board",
+    "category": "live",
+    "type": "flag",
+    "points": 250,
+    "text": "A live bounty. The flag is announced in the room. The first wallet to submit it takes the whole escrowed bounty, paid by the contract the moment the transaction lands.",
+    "hints": [
+      "Listen to the speaker"
+    ],
     "files": []
   }
 ]
