@@ -1,20 +1,24 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAccount, useReadContract, useWatchContractEvent, useReadContracts, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
-import { BaseError, formatEther, parseEther, parseEventLogs, type TransactionReceipt } from 'viem'
-import { simulateContract } from 'wagmi/actions'
+import { BaseError, type EstimateContractGasParameters, formatEther, parseEther, parseEventLogs, type TransactionReceipt } from 'viem'
+import { getPublicClient, simulateContract } from 'wagmi/actions'
 import { config } from '@/lib/wagmi'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CTF_ADDRESS, EXPLORER } from '@/lib/config'
+import vaultSource from '@/levels/OpenVault.sol?raw'
+import vaultCode from '@/levels/OpenVault.bin?raw'
 import { INSTANCE, IDS, MAX_ID, challenges, ctfAbi, flagAddress, metaFor, signSolve } from '@/lib/ctf'
 
 const ctf = { address: CTF_ADDRESS, abi: ctfAbi } as const
 // Explicit gas so MetaMask skips eth_estimateGas on the rate-limited public RPC.
 // Monad charges by gas limit, so keep these tight: forge reports submit ~182k worst case (first solver, first blood, payout), create ~71k, topUp ~31k.
-// deployInstance ~231k, submitInstance ~183k.
-const GAS = { submit: 250_000n, create: 100_000n, topUp: 50_000n, deploy: 300_000n, submitInstance: 250_000n }
+// submitInstance ~183k. createInstanceChallenge and deployInstance scale with the organizer's bytecode, so those are estimated.
+const GAS = { submit: 250_000n, create: 100_000n, topUp: 50_000n, submitInstance: 250_000n }
+// Estimate on our RPC with 20% headroom; Monad charges the full limit, so no flat oversized constant.
+const estimate = async (req: EstimateContractGasParameters) => ((await getPublicClient(config).estimateContractGas(req)) * 12n) / 10n
 const mon = (wei: bigint) => `${formatEther(wei)} MON`
 
 function solvedText(r: TransactionReceipt, points: number) {
@@ -122,6 +126,7 @@ export function ChallengeDetail({ id }: { id: number }) {
   const onchain = useReadContract({ ...ctf, functionName: 'challenges', args: [BigInt(id)] })
   const done = useReadContract({ ...ctf, functionName: 'solved', args: [BigInt(id), address!], query: { enabled: !!address } })
   const live = !!onchain.data && onchain.data[0] !== '0x0000000000000000000000000000000000000000'
+  const isInstance = live ? onchain.data![0] === INSTANCE : c.type === 'instance'
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -162,7 +167,7 @@ export function ChallengeDetail({ id }: { id: number }) {
         </div>
       )}
 
-      {c.type === 'flag' && (
+      {!isInstance && (
         <form onSubmit={submit} className="mt-10">
           <label htmlFor="flag" className="text-sm font-medium">Flag</label>
           <div className="mt-2 flex gap-2">
@@ -179,7 +184,7 @@ export function ChallengeDetail({ id }: { id: number }) {
           </div>
         </form>
       )}
-      {c.type === 'instance' && <InstancePanel id={id} live={live} solved={done.data === true} points={onchain.data?.[1] ?? c.points} />}
+      {isInstance && <InstancePanel id={id} live={live} solved={done.data === true} points={onchain.data?.[1] ?? c.points} />}
     </article>
   )
 }
@@ -190,7 +195,18 @@ function InstancePanel({ id, live, solved, points }: { id: number; live: boolean
   const sub = useWriteContract()
   const [simError, setSimError] = useState<unknown>()
   const inst = useReadContract({ ...ctf, functionName: 'instances', args: [BigInt(id), address!], query: { enabled: !!address } })
+  const source = useReadContract({ ...ctf, functionName: 'levelSource', args: [BigInt(id)], query: { enabled: live } })
   const addr = inst.data && inst.data !== '0x0000000000000000000000000000000000000000' ? inst.data : undefined
+
+  async function deployIt() {
+    setSimError(undefined)
+    try {
+      const req = { ...ctf, functionName: 'deployInstance', args: [BigInt(id)], account: address } as const
+      deploy.writeContract({ ...req, gas: await estimate(req) })
+    } catch (err) {
+      setSimError(err)
+    }
+  }
 
   async function submit() {
     setSimError(undefined)
@@ -205,17 +221,24 @@ function InstancePanel({ id, live, solved, points }: { id: number; live: boolean
 
   return (
     <div className="mt-10 space-y-4">
+      {source.data && (
+        <div>
+          <h3 className="text-sm font-medium">Level source</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Stored on-chain by the setter. Every player gets a fresh copy of this contract, deployed with their address as the constructor argument.</p>
+          <pre className="mt-2 max-h-96 overflow-auto rounded-md border bg-muted p-4 font-mono text-xs leading-relaxed">{source.data}</pre>
+        </div>
+      )}
       {addr ? (
         <p className="text-sm">
           Your instance{' '}
           <a className="break-all font-mono text-primary underline" href={`${EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer">{addr}</a>
         </p>
       ) : (
-        <Button className="h-12 px-5" disabled={!address || !live || deploy.isPending} onClick={() => deploy.writeContract({ ...ctf, functionName: 'deployInstance', args: [BigInt(id)], gas: GAS.deploy })}>
+        <Button className="h-12 px-5" disabled={!address || !live || deploy.isPending} onClick={deployIt}>
           Deploy my instance
         </Button>
       )}
-      <TxStatus hash={deploy.data} error={deploy.error} pending={deploy.isPending} success="Instance deployed." />
+      <TxStatus hash={deploy.data} error={addr ? undefined : simError ?? deploy.error} pending={deploy.isPending} success="Instance deployed." />
       {addr && (
         <>
           <Button className="h-12 px-5" disabled={solved || sub.isPending} onClick={submit}>{solved ? 'Solved' : 'Submit instance'}</Button>
@@ -239,12 +262,26 @@ export function Admin() {
   const [topAmt, setTopAmt] = useState('')
   const write = useWriteContract()
   const top = useWriteContract()
-  const isInstance = metaFor(Number(id)).type === 'instance'
-  const derived = isInstance ? INSTANCE : flag ? flagAddress(flag) : undefined
+  const [kindSel, setKind] = useState<'flag' | 'instance'>()
+  const [source, setSource] = useState('')
+  const [code, setCode] = useState('')
+  const [estError, setEstError] = useState<unknown>()
+  const kind = kindSel ?? metaFor(Number(id)).type
+  const derived = flag ? flagAddress(flag) : undefined
+  const codeOk = /^0x([0-9a-fA-F]{2})+$/.test(code.trim())
+  const ready = kind === 'instance' ? codeOk && !!source.trim() : !!derived
 
-  function create(e: React.FormEvent) {
+  async function create(e: React.FormEvent) {
     e.preventDefault()
-    write.writeContract({ ...ctf, functionName: 'createChallenge', args: [BigInt(id), derived!, Number(points)], value: parseEther(bounty || '0'), gas: GAS.create })
+    setEstError(undefined)
+    const value = parseEther(bounty || '0')
+    if (kind === 'flag') return write.writeContract({ ...ctf, functionName: 'createChallenge', args: [BigInt(id), derived!, Number(points)], value, gas: GAS.create })
+    try {
+      const req = { ...ctf, functionName: 'createInstanceChallenge', args: [BigInt(id), Number(points), code.trim() as `0x${string}`, source], value, account: address } as const
+      write.writeContract({ ...req, gas: await estimate(req) })
+    } catch (err) {
+      setEstError(err)
+    }
   }
 
   function topUp(e: React.FormEvent) {
@@ -269,7 +306,33 @@ export function Admin() {
             <Input id="points" inputMode="numeric" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="100" className="mt-1" />
           </div>
         </div>
-        {isInstance ? <p className="text-sm text-muted-foreground">Instance level: no flag. Players deploy their own vault and the contract checks it.</p> : <div>
+        <div className="flex gap-2" role="radiogroup" aria-label="Challenge type">
+          {(['flag', 'instance'] as const).map((k) => (
+            <Button key={k} type="button" role="radio" aria-checked={kind === k} variant={kind === k ? 'default' : 'outline'} onClick={() => setKind(k)}>
+              {k === 'flag' ? 'Flag' : 'Smart contract level'}
+            </Button>
+          ))}
+        </div>
+        {kind === 'instance' ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Each player gets their own copy of your contract. It must have <code className="font-mono">constructor(address player)</code> and <code className="font-mono">isSolved() returns (bool)</code>.{' '}
+              <button type="button" className="text-primary underline" onClick={() => { setSource(vaultSource); setCode(vaultCode.trim()) }}>Load example: Open Vault</button>
+            </p>
+            <div>
+              <label htmlFor="src" className="text-sm font-medium">Solidity source (shown to players)</label>
+              <textarea id="src" value={source} onChange={(e) => setSource(e.target.value)} rows={10} spellCheck={false} className="mt-1 w-full rounded-md border bg-transparent p-3 font-mono text-xs" placeholder="// SPDX-License-Identifier: MIT&#10;pragma solidity ^0.8.20;&#10;contract Level { ... }" />
+            </div>
+            <div>
+              <label htmlFor="code" className="text-sm font-medium">Creation bytecode</label>
+              <textarea id="code" value={code} onChange={(e) => setCode(e.target.value)} rows={4} spellCheck={false} className="mt-1 w-full break-all rounded-md border bg-transparent p-3 font-mono text-xs" placeholder="0x6080..." />
+              <p className="mt-1 text-xs text-muted-foreground">
+                From <code className="font-mono">forge inspect src/Level.sol:Level bytecode</code>, or Remix → Compile → Bytecode → "object" (add 0x).
+                {code && !codeOk && <span className="text-destructive"> Must be 0x followed by hex.</span>}
+              </p>
+            </div>
+          </div>
+        ) : <div>
           <label htmlFor="aflag" className="text-sm font-medium">Flag</label>
           <Input id="aflag" value={flag} onChange={(e) => setFlag(e.target.value)} placeholder="MONAD{...}" className="mt-1 font-mono" autoComplete="off" spellCheck={false} />
           {derived && <p className="mt-1 break-all font-mono text-xs text-muted-foreground">flag address {derived}</p>}
@@ -285,8 +348,8 @@ export function Admin() {
           </p>
         )}
         {Number(id) > MAX_ID && <p className="text-sm text-destructive">Use an id from 1 to {MAX_ID}. Higher ids do not appear in the list.</p>}
-        <Button type="submit" disabled={!address || !id || Number(id) < 1 || Number(id) > MAX_ID || !points || !derived || write.isPending}>Create challenge</Button>
-        <TxStatus hash={write.data} error={write.error} pending={write.isPending} success="Challenge created." />
+        <Button type="submit" disabled={!address || !id || Number(id) < 1 || Number(id) > MAX_ID || !points || !ready || write.isPending}>Create challenge</Button>
+        <TxStatus hash={write.data} error={estError ?? write.error} pending={write.isPending} success="Challenge created." />
       </form>
 
       <h2 className="mt-16 text-3xl font-semibold tracking-tight">Top up a bounty</h2>

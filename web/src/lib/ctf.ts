@@ -11,6 +11,8 @@ export const ctfAbi = parseAbi([
   'function score(address) view returns (uint256)',
   'function getPlayers() view returns (address[])',
   'function firstBlood(uint256) view returns (address)',
+  'function createInstanceChallenge(uint256 id, uint32 points, bytes initCode, string source) payable',
+  'function levelSource(uint256) view returns (string)',
   'function deployInstance(uint256 id) returns (address)',
   'function submitInstance(uint256 id)',
   'function instances(uint256, address) view returns (address)',

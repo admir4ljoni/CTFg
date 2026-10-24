@@ -43,7 +43,7 @@
     "category": "smart-contract",
     "type": "instance",
     "points": 200,
-    "text": "Deploy your personal Vault instance, drain it, then submit. The contract is verified on the explorer.",
+    "text": "Deploy your personal Vault instance, drain it, then submit. The level source is shown below; your instance address appears once deployed.",
     "hints": [
       "Who is allowed to withdraw?"
     ],
