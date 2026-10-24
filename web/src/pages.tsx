@@ -8,6 +8,9 @@ import { CTF_ADDRESS, EXPLORER } from '@/lib/config'
 import { challenges, ctfAbi, flagAddress, signSolve } from '@/lib/ctf'
 
 const ctf = { address: CTF_ADDRESS, abi: ctfAbi } as const
+// Explicit gas so MetaMask skips eth_estimateGas on the rate-limited public RPC.
+// Monad charges by gas limit, so keep these tight: forge reports submit ~113k, create ~71k.
+const GAS = { submit: 150_000n, create: 100_000n }
 
 function errText(e: unknown) {
   if (e instanceof BaseError) {
@@ -107,7 +110,7 @@ export function ChallengeDetail({ id }: { id: number }) {
     setSigError(undefined)
     try {
       const sig = await signSolve(flag, id, address)
-      write.writeContract({ ...ctf, functionName: 'submit', args: [BigInt(id), sig] })
+      write.writeContract({ ...ctf, functionName: 'submit', args: [BigInt(id), sig], gas: GAS.submit })
     } catch (err) {
       setSigError(err)
     }
@@ -169,7 +172,7 @@ export function Admin() {
 
   function create(e: React.FormEvent) {
     e.preventDefault()
-    write.writeContract({ ...ctf, functionName: 'createChallenge', args: [BigInt(id), derived!, Number(points)] })
+    write.writeContract({ ...ctf, functionName: 'createChallenge', args: [BigInt(id), derived!, Number(points)], gas: GAS.create })
   }
 
   return (
