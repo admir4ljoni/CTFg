@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {CTF} from "../src/CTF.sol";
+import {Vulnerable} from "../src/Vulnerable.sol";
 
 contract CTFTest is Test {
     CTF ctf;
@@ -108,6 +109,33 @@ contract CTFTest is Test {
     function testTopUpUnknownReverts() public {
         vm.expectRevert(CTF.Unknown.selector);
         ctf.topUp{value: 1}(99);
+    }
+
+    function testInstanceExploitAndSubmit() public {
+        ctf.createChallenge{value: 1 ether}(4, ctf.INSTANCE(), 200);
+        vm.startPrank(player);
+        vm.expectRevert(CTF.NotSolved.selector);
+        ctf.submitInstance(4); // no instance yet
+
+        Vulnerable v = Vulnerable(ctf.deployInstance(4));
+        assertEq(ctf.instances(4, player), address(v));
+        assertEq(v.player(), player);
+        vm.expectRevert(CTF.NotSolved.selector);
+        ctf.submitInstance(4); // not drained
+
+        v.withdraw(100); // the bug: no owner check
+        ctf.submitInstance(4);
+        assertEq(ctf.score(player), 200);
+        assertEq(player.balance, 0.95 ether);
+        vm.expectRevert(CTF.AlreadySolved.selector);
+        ctf.submitInstance(4);
+    }
+
+    function testInstanceOnlyForInstanceChallenges() public {
+        vm.expectRevert(CTF.NotInstance.selector);
+        ctf.deployInstance(1);
+        vm.expectRevert(CTF.NotInstance.selector);
+        ctf.submitInstance(1);
     }
 
     receive() external payable {}
