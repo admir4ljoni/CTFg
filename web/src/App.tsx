@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi'
 import { monadTestnet } from 'wagmi/chains'
 import { Button } from '@/components/ui/button'
-import { Admin, ChallengeDetail, ChallengeList } from '@/pages'
+import { Admin, ChallengeDetail, ChallengeList, Leaderboard } from '@/pages'
 
 function ConnectButton() {
   const { address, chainId, isConnected } = useAccount()
@@ -47,12 +47,13 @@ export default function App() {
       <header className="flex items-center justify-between border-b px-6 py-4">
         <nav className="flex items-baseline gap-6">
           <a href="#/" className="text-xl font-semibold tracking-tight">Monad CTF</a>
+          <a href="#/board" className="text-sm text-muted-foreground hover:text-foreground">Leaderboard</a>
           <a href="#/admin" className="text-sm text-muted-foreground hover:text-foreground">Create</a>
         </nav>
         <ConnectButton />
       </header>
       <main className="mx-auto max-w-3xl px-6 py-10">
-        {detail ? <ChallengeDetail id={Number(detail[1])} /> : hash === '#/admin' ? <Admin /> : <ChallengeList />}
+        {detail ? <ChallengeDetail id={Number(detail[1])} /> : hash === '#/admin' ? <Admin /> : hash === '#/board' ? <Leaderboard /> : <ChallengeList />}
       </main>
     </div>
   )

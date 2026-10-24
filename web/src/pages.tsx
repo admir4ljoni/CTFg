@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useAccount, useReadContract, useReadContracts, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
+import { useAccount, useReadContract, useWatchContractEvent, useReadContracts, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { BaseError, formatEther, parseEther, parseEventLogs, type TransactionReceipt } from 'viem'
 import { simulateContract } from 'wagmi/actions'
 import { config } from '@/lib/wagmi'
@@ -12,8 +12,8 @@ import { IDS, MAX_ID, challenges, ctfAbi, flagAddress, metaFor, signSolve } from
 
 const ctf = { address: CTF_ADDRESS, abi: ctfAbi } as const
 // Explicit gas so MetaMask skips eth_estimateGas on the rate-limited public RPC.
-// Monad charges by gas limit, so keep these tight: forge reports submit ~115k with payout, create ~71k, topUp ~31k.
-const GAS = { submit: 150_000n, create: 100_000n, topUp: 50_000n }
+// Monad charges by gas limit, so keep these tight: forge reports submit ~182k worst case (first solver, first blood, payout), create ~71k, topUp ~31k.
+const GAS = { submit: 250_000n, create: 100_000n, topUp: 50_000n }
 const mon = (wei: bigint) => `${formatEther(wei)} MON`
 
 function solvedText(r: TransactionReceipt, points: number) {
@@ -55,14 +55,14 @@ function TxStatus({ hash, error, pending, success }: { hash?: `0x${string}`; err
 export function ChallengeList() {
   const { address } = useAccount()
   const onchain = useReadContracts({
-    contracts: IDS.map((id) => ({ ...ctf, functionName: 'challenges', args: [BigInt(id)] })),
+    contracts: IDS.map((id) => ({ ...ctf, functionName: 'challenges', args: [BigInt(id)] } as const)),
   })
   type Row = readonly [string, number, number, string, bigint]
   const rows = IDS.map((id, i) => ({ id, row: onchain.data?.[i]?.result as Row | undefined }))
   // JSON challenges always show; on-chain-only ones show once created.
   const shown = rows.filter(({ id, row }) => challenges.some((c) => c.id === id) || (row && row[0] !== '0x0000000000000000000000000000000000000000'))
   const mine = useReadContracts({
-    contracts: shown.map(({ id }) => ({ ...ctf, functionName: 'solved', args: [BigInt(id), address!] })),
+    contracts: shown.map(({ id }) => ({ ...ctf, functionName: 'solved', args: [BigInt(id), address!] } as const)),
     query: { enabled: !!address },
   })
   const score = useReadContract({ ...ctf, functionName: 'score', args: [address!], query: { enabled: !!address } })
@@ -251,6 +251,76 @@ export function Admin() {
         <Button type="submit" disabled={!address || !topId || !Number(topAmt) || top.isPending}>Add to bounty</Button>
         <TxStatus hash={top.data} error={top.error} pending={top.isPending} success="Bounty added." />
       </form>
+    </section>
+  )
+}
+
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
+
+export function Leaderboard() {
+  const { address } = useAccount()
+  const qc = useQueryClient()
+  const [feed, setFeed] = useState<{ id: number; player: string; points: number; paid: bigint; tx: string }[]>([])
+  // Live only: public RPCs cap getLogs at 100 blocks, so history comes from contract storage, not events.
+  useWatchContractEvent({
+    ...ctf,
+    eventName: 'Solved',
+    onLogs(logs) {
+      const rows = logs.map((l) => ({ id: Number(l.args.id), player: l.args.player!, points: l.args.points!, paid: l.args.bountyPaid!, tx: l.transactionHash }))
+      setFeed((f) => [...rows.reverse(), ...f].slice(0, 20))
+      qc.invalidateQueries()
+    },
+  })
+  const players = useReadContract({ ...ctf, functionName: 'getPlayers' })
+  // A 0-point solve can list a player twice; dedupe here.
+  const list = [...new Set(players.data ?? [])]
+  const scores = useReadContracts({ contracts: list.map((p) => ({ ...ctf, functionName: 'score', args: [p] } as const)) })
+  const bloods = useReadContracts({ contracts: IDS.map((id) => ({ ...ctf, functionName: 'firstBlood', args: [BigInt(id)] } as const)) })
+  const bloodCount = (p: string) => bloods.data?.filter((b) => b.result === p).length ?? 0
+  const ranked = list
+    .map((p, i) => ({ p, score: (scores.data?.[i]?.result as bigint | undefined) ?? 0n }))
+    .filter((r) => r.score > 0n)
+    .sort((a, b) => (b.score > a.score ? 1 : b.score < a.score ? -1 : 0))
+
+  return (
+    <section className="grid gap-10 md:grid-cols-[1fr_16rem]">
+      <div>
+        <h2 className="mb-8 text-3xl font-semibold tracking-tight">Leaderboard</h2>
+        {ranked.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{players.isLoading ? 'Loading…' : 'No solves yet. Be first.'}</p>
+        ) : (
+          <ol className="divide-y border-y">
+            {ranked.map(({ p, score }, i) => (
+              <li key={p} className={`grid grid-cols-[2rem_1fr_auto] items-center gap-4 py-3 ${p === address ? 'bg-primary/5' : ''}`}>
+                <span className="text-right tabular-nums text-muted-foreground">{i + 1}</span>
+                <span className="flex items-center gap-2">
+                  <a className="font-mono hover:underline" href={`${EXPLORER}/address/${p}`} target="_blank" rel="noreferrer">{short(p)}</a>
+                  {p === address && <Badge variant="secondary">you</Badge>}
+                  {bloodCount(p) > 0 && <Badge className="bg-red-600 text-white">{bloodCount(p)} first blood{bloodCount(p) > 1 ? 's' : ''}</Badge>}
+                </span>
+                <span className="text-xl font-semibold tabular-nums text-primary">{score.toString()}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+      <aside>
+        <h3 className="mb-4 text-sm font-medium text-muted-foreground">Live solves</h3>
+        {feed.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Watching Monad for new solves…</p>
+        ) : (
+          <ul className="space-y-3 text-sm">
+            {feed.map((f) => (
+              <li key={f.tx + f.id}>
+                <a className="hover:underline" href={`${EXPLORER}/tx/${f.tx}`} target="_blank" rel="noreferrer">
+                  <span className="font-mono">{short(f.player)}</span> solved {metaFor(f.id).title} <span className="text-primary">+{f.points}</span>
+                  {f.paid > 0n && <span className="text-amber-600"> · {mon(f.paid)}</span>}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </aside>
     </section>
   )
 }

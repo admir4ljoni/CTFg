@@ -9,6 +9,8 @@ export const ctfAbi = parseAbi([
   'function challenges(uint256) view returns (address flagAddr, uint32 points, uint32 solves, address setter, uint96 bounty)',
   'function solved(uint256, address) view returns (bool)',
   'function score(address) view returns (uint256)',
+  'function getPlayers() view returns (address[])',
+  'function firstBlood(uint256) view returns (address)',
   'event ChallengeCreated(uint256 indexed id, address indexed setter, uint32 points)',
   'error Exists()',
   'error Unknown()',
