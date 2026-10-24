@@ -112,7 +112,8 @@ contract CTFTest is Test {
     }
 
     function testInstanceExploitAndSubmit() public {
-        ctf.createChallenge{value: 1 ether}(4, ctf.INSTANCE(), 200);
+        ctf.createInstanceChallenge{value: 1 ether}(4, 200, type(Vulnerable).creationCode, "contract Vulnerable {}");
+        assertEq(ctf.levelSource(4), "contract Vulnerable {}");
         vm.startPrank(player);
         vm.expectRevert(CTF.NotSolved.selector);
         ctf.submitInstance(4); // no instance yet
@@ -136,6 +137,12 @@ contract CTFTest is Test {
         ctf.deployInstance(1);
         vm.expectRevert(CTF.NotInstance.selector);
         ctf.submitInstance(1);
+    }
+
+    function testCreateChallengeRejectsInstanceSentinel() public {
+        address inst = ctf.INSTANCE();
+        vm.expectRevert(bytes("flag"));
+        ctf.createChallenge(5, inst, 1);
     }
 
     receive() external payable {}

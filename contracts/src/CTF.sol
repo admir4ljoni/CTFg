@@ -2,7 +2,11 @@
 pragma solidity ^0.8.20;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {Vulnerable} from "./Vulnerable.sol";
+
+/// @notice What every instance level must expose. Its constructor takes (address player).
+interface ILevel {
+    function isSolved() external view returns (bool);
+}
 
 /// @title Monad CTF
 /// @notice Flag never touches the chain. Setter stores address(keccak256(flag)).
@@ -29,6 +33,9 @@ contract CTF {
     address[] internal players;
     mapping(uint256 => address) public firstBlood;
     mapping(uint256 => mapping(address => address)) public instances;
+    // Organizer-supplied level: creation bytecode (deployed per player) and Solidity source (shown to players).
+    mapping(uint256 => bytes) public levelCode;
+    mapping(uint256 => string) public levelSource;
 
     event ChallengeCreated(uint256 indexed id, address indexed setter, uint32 points);
     event BountyAdded(uint256 indexed id, address indexed from, uint256 amount);
@@ -43,11 +50,27 @@ contract CTF {
     error PayFailed();
     error NotInstance();
     error NotSolved();
+    error DeployFailed();
 
     /// @notice msg.value becomes the bounty, paid to the next solver.
     function createChallenge(uint256 id, address flagAddr, uint32 points) external payable {
+        require(uint160(flagAddr) > 1, "flag"); // 0 = unset, 1 = INSTANCE
+        _create(id, flagAddr, points);
+    }
+
+    /// @notice Instance level. initCode is the level's creation bytecode; its constructor must take (address player).
+    function createInstanceChallenge(uint256 id, uint32 points, bytes calldata initCode, string calldata source)
+        external
+        payable
+    {
+        require(initCode.length > 0, "code");
+        _create(id, INSTANCE, points);
+        levelCode[id] = initCode;
+        levelSource[id] = source;
+    }
+
+    function _create(uint256 id, address flagAddr, uint32 points) internal {
         if (challenges[id].flagAddr != address(0)) revert Exists();
-        require(flagAddr != address(0), "flag");
         challenges[id] = Challenge(flagAddr, points, 0, msg.sender, uint96(msg.value));
         emit ChallengeCreated(id, msg.sender, points);
         if (msg.value > 0) emit BountyAdded(id, msg.sender, msg.value);
@@ -84,7 +107,11 @@ contract CTF {
 
     function deployInstance(uint256 id) external returns (address inst) {
         if (challenges[id].flagAddr != INSTANCE) revert NotInstance();
-        inst = address(new Vulnerable(msg.sender));
+        bytes memory code = abi.encodePacked(levelCode[id], abi.encode(msg.sender));
+        assembly {
+            inst := create(0, add(code, 0x20), mload(code))
+        }
+        if (inst == address(0)) revert DeployFailed();
         instances[id][msg.sender] = inst;
         emit InstanceDeployed(id, msg.sender, inst);
     }
@@ -94,7 +121,7 @@ contract CTF {
         if (c.flagAddr != INSTANCE) revert NotInstance();
         if (solved[id][msg.sender]) revert AlreadySolved();
         address inst = instances[id][msg.sender];
-        if (inst == address(0) || !Vulnerable(inst).isSolved()) revert NotSolved();
+        if (inst == address(0) || !ILevel(inst).isSolved()) revert NotSolved();
         _solve(id, c);
     }
 
