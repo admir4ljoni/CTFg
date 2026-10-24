@@ -16,9 +16,9 @@ Times are targets from PLAN.md §10. Freeze 16:45.
 - [x] `CTF.sol`: `createChallenge(id, flagAddr, points)`, `submit(id, sig)` with ECDSA recover of `keccak256(abi.encode(id, msg.sender))`, `score[player]`, `Solved` and `ChallengeCreated` events, double-solve reverts
 - [x] `test/CTF.t.sol`: create → sign with flag-derived key → submit → assert score; wrong flag reverts; second submit reverts
 - [ ] User deploys to testnet, verifies on Sourcify; address written to `web/` config and README
-- [ ] Web: challenge list reads points/solve count from contract, text from JSON
-- [ ] Web: challenge detail, flag input → `keccak256(flag)` → sign `(id, address)` → `submit` tx → success/revert toast
-- [ ] Web: admin page, create challenge (flag → derived address, points)
+- [x] Web: challenge list reads points/solve count from contract, text from JSON
+- [x] Web: challenge detail, flag input → `keccak256(flag)` → sign `(id, address)` → `submit` tx → success/revert toast
+- [x] Web: admin page, create challenge (flag → derived address, points)
 - [ ] Deployed; user solves the warm-up on the live URL and sees score change
 - [ ] **Post #1 on X** (tag @monad @monad_dev @geeky_kartikey, verified-contract screenshot)
 
