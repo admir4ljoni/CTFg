@@ -26,7 +26,16 @@ contract CTF {
     address public immutable owner = msg.sender;
     uint256 public fees;
 
+    struct Info {
+        string title;
+        string text;
+        string hint;
+    }
+
+    /// @notice Ids run 1..count, assigned on create.
+    uint256 public count;
     mapping(uint256 => Challenge) public challenges;
+    mapping(uint256 => Info) public info;
     mapping(uint256 => mapping(address => bool)) public solved;
     mapping(address => uint256) public score;
     // Public RPCs cap eth_getLogs at 100 blocks, so the leaderboard reads these instead of replaying Solved.
@@ -42,7 +51,6 @@ contract CTF {
     event InstanceDeployed(uint256 indexed id, address indexed player, address instance);
     event Solved(uint256 indexed id, address indexed player, uint32 points, uint256 bountyPaid, uint256 timestamp);
 
-    error Exists();
     error Unknown();
     error AlreadySolved();
     error WrongFlag();
@@ -53,25 +61,28 @@ contract CTF {
     error DeployFailed();
 
     /// @notice msg.value becomes the bounty, paid to the next solver.
-    function createChallenge(uint256 id, address flagAddr, uint32 points) external payable {
+    function createChallenge(address flagAddr, uint32 points, Info calldata i) external payable returns (uint256 id) {
         require(uint160(flagAddr) > 1, "flag"); // 0 = unset, 1 = INSTANCE
-        _create(id, flagAddr, points);
+        id = _create(flagAddr, points, i);
     }
 
     /// @notice Instance level. initCode is the level's creation bytecode; its constructor must take (address player).
-    function createInstanceChallenge(uint256 id, uint32 points, bytes calldata initCode, string calldata source)
+    function createInstanceChallenge(uint32 points, bytes calldata initCode, string calldata source, Info calldata i)
         external
         payable
+        returns (uint256 id)
     {
         require(initCode.length > 0, "code");
-        _create(id, INSTANCE, points);
+        id = _create(INSTANCE, points, i);
         levelCode[id] = initCode;
         levelSource[id] = source;
     }
 
-    function _create(uint256 id, address flagAddr, uint32 points) internal {
-        if (challenges[id].flagAddr != address(0)) revert Exists();
+    function _create(address flagAddr, uint32 points, Info calldata i) internal returns (uint256 id) {
+        require(bytes(i.title).length > 0, "title");
+        id = ++count;
         challenges[id] = Challenge(flagAddr, points, 0, msg.sender, uint96(msg.value));
+        info[id] = i;
         emit ChallengeCreated(id, msg.sender, points);
         if (msg.value > 0) emit BountyAdded(id, msg.sender, msg.value);
     }

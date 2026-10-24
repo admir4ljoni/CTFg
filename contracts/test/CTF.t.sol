@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {CTF} from "../src/CTF.sol";
 import {Vulnerable} from "../src/Vulnerable.sol";
+import {PrivateLocker} from "../src/PrivateLocker.sol";
 
 contract CTFTest is Test {
     CTF ctf;
@@ -11,9 +12,13 @@ contract CTFTest is Test {
     address flagAddr = vm.addr(flagKey);
     address player = makeAddr("player");
 
+    function meta(string memory t) internal pure returns (CTF.Info memory) {
+        return CTF.Info(t, "text", "hint");
+    }
+
     function setUp() public {
         ctf = new CTF();
-        ctf.createChallenge(1, flagAddr, 100);
+        ctf.createChallenge(flagAddr, 100, meta("one")); // id 1
     }
 
     function sign(uint256 key, uint256 id, address who) internal pure returns (bytes memory) {
@@ -51,13 +56,19 @@ contract CTFTest is Test {
         ctf.submit(1, sig);
     }
 
-    function testDuplicateIdReverts() public {
-        vm.expectRevert(CTF.Exists.selector);
-        ctf.createChallenge(1, flagAddr, 1);
+    function testIdsAndInfo() public {
+        assertEq(ctf.createChallenge(flagAddr, 1, meta("two")), 2);
+        assertEq(ctf.count(), 2);
+        (string memory t, string memory x, string memory h) = ctf.info(2);
+        assertEq(t, "two");
+        assertEq(x, "text");
+        assertEq(h, "hint");
+        vm.expectRevert(bytes("title"));
+        ctf.createChallenge(flagAddr, 1, meta(""));
     }
 
     function testBountyPaysFirstSolverMinusFee() public {
-        ctf.createChallenge{value: 1 ether}(2, flagAddr, 50);
+        ctf.createChallenge{value: 1 ether}(flagAddr, 50, meta("two"));
         ctf.topUp{value: 1 ether}(2);
         address second = makeAddr("second");
 
@@ -74,7 +85,7 @@ contract CTFTest is Test {
     }
 
     function testWithdrawFeesOwnerOnly() public {
-        ctf.createChallenge{value: 1 ether}(2, flagAddr, 50);
+        ctf.createChallenge{value: 1 ether}(flagAddr, 50, meta("two"));
         vm.prank(player);
         ctf.submit(2, sign(flagKey, 2, player));
 
@@ -90,7 +101,7 @@ contract CTFTest is Test {
 
     function testPlayersAndFirstBlood() public {
         address second = makeAddr("second");
-        ctf.createChallenge(2, flagAddr, 50);
+        ctf.createChallenge(flagAddr, 50, meta("two"));
         vm.prank(player);
         ctf.submit(1, sign(flagKey, 1, player));
         vm.prank(second);
@@ -112,24 +123,29 @@ contract CTFTest is Test {
     }
 
     function testInstanceExploitAndSubmit() public {
-        ctf.createInstanceChallenge{value: 1 ether}(4, 200, type(Vulnerable).creationCode, "contract Vulnerable {}");
-        assertEq(ctf.levelSource(4), "contract Vulnerable {}");
+        assertEq(
+            ctf.createInstanceChallenge{value: 1 ether}(
+                200, type(Vulnerable).creationCode, "contract Vulnerable {}", meta("vault")
+            ),
+            2
+        );
+        assertEq(ctf.levelSource(2), "contract Vulnerable {}");
         vm.startPrank(player);
         vm.expectRevert(CTF.NotSolved.selector);
-        ctf.submitInstance(4); // no instance yet
+        ctf.submitInstance(2); // no instance yet
 
-        Vulnerable v = Vulnerable(ctf.deployInstance(4));
-        assertEq(ctf.instances(4, player), address(v));
+        Vulnerable v = Vulnerable(ctf.deployInstance(2));
+        assertEq(ctf.instances(2, player), address(v));
         assertEq(v.player(), player);
         vm.expectRevert(CTF.NotSolved.selector);
-        ctf.submitInstance(4); // not drained
+        ctf.submitInstance(2); // not drained
 
         v.withdraw(100); // the bug: no owner check
-        ctf.submitInstance(4);
+        ctf.submitInstance(2);
         assertEq(ctf.score(player), 200);
         assertEq(player.balance, 0.95 ether);
         vm.expectRevert(CTF.AlreadySolved.selector);
-        ctf.submitInstance(4);
+        ctf.submitInstance(2);
     }
 
     function testInstanceOnlyForInstanceChallenges() public {
@@ -142,7 +158,19 @@ contract CTFTest is Test {
     function testCreateChallengeRejectsInstanceSentinel() public {
         address inst = ctf.INSTANCE();
         vm.expectRevert(bytes("flag"));
-        ctf.createChallenge(5, inst, 1);
+        ctf.createChallenge(inst, 1, meta("x"));
+    }
+
+    function testPrivateLocker() public {
+        uint256 id = ctf.createInstanceChallenge(300, type(PrivateLocker).creationCode, "src", meta("locker"));
+        vm.startPrank(player);
+        PrivateLocker l = PrivateLocker(ctf.deployInstance(id));
+        vm.expectRevert(bytes("wrong password"));
+        l.unlock(bytes32(0));
+        bytes32 pw = vm.load(address(l), bytes32(uint256(0))); // what `cast storage <addr> 0` returns
+        l.unlock(pw);
+        ctf.submitInstance(id);
+        assertEq(ctf.score(player), 300);
     }
 
     receive() external payable {}
