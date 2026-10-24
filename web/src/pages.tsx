@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAccount, useReadContract, useReadContracts, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { BaseError } from 'viem'
 import { simulateContract } from 'wagmi/actions'
@@ -27,6 +28,8 @@ function errText(e: unknown) {
 
 function TxStatus({ hash, error, pending, success }: { hash?: `0x${string}`; error: unknown; pending: boolean; success?: string }) {
   const receipt = useWaitForTransactionReceipt({ hash })
+  const qc = useQueryClient()
+  useEffect(() => { if (receipt.isSuccess) qc.invalidateQueries() }, [receipt.isSuccess, qc])
   if (error) return <p className="text-sm text-destructive">{errText(error)}</p>
   if (pending) return <p className="text-sm text-muted-foreground">Confirm in MetaMask…</p>
   if (hash && receipt.isLoading) return <p className="text-sm text-muted-foreground">Waiting for Monad…</p>
