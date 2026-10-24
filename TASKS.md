@@ -25,7 +25,7 @@ Times are targets from PLAN.md §10. Freeze 16:45.
 ## Slice 2 — Bounties pay MON per solve (target 14:45)
 - [x] `CTF.sol`: `createChallenge` payable (value = bounty), `topUp(id)` payable, first solver receives bounty minus constant platform fee, `withdrawFees()` owner-only, checks-effects-interactions
 - [x] Test: bounty lands in solver balance, fee accrues, second solver gets points but no MON
-- [ ] User redeploys + reverifies testnet; config + README updated
+- [x] User redeploys + reverifies testnet; config + README updated
 - [x] Web: bounty shown on list and detail; admin top-up; solve toast shows MON received with explorer link
 - [ ] Deployed; user funds a challenge with 1 MON and solves it from a second wallet on the live URL
 
@@ -38,7 +38,7 @@ Times are targets from PLAN.md §10. Freeze 16:45.
 - [ ] `Vulnerable.sol`: reentrancy or access-control bug, constructor takes player, exposes `isSolved()`
 - [ ] `CTF.sol`: `deployInstance(id)` emits `InstanceDeployed(id, player, addr)`, `submitInstance(id)` checks `isSolved()` then same points/bounty path
 - [ ] Test: deploy instance → exploit in test → submitInstance succeeds; unsolved instance reverts
-- [ ] User redeploys + reverifies testnet; config + README updated
+- [x] User redeploys + reverifies testnet; config + README updated
 - [ ] Web: instance challenge shows Deploy My Instance, instance address with explorer link, Submit button; `challenges.json` entry has `type: "instance"`
 - [ ] Deployed; user deploys an instance, exploits it with `cast`, submits on the live URL
 - [ ] Create the 4 real challenges on testnet, fund 2 with bounties
