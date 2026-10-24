@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useAccount, useReadContract, useReadContracts, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
 import { BaseError } from 'viem'
+import { simulateContract } from 'wagmi/actions'
+import { config } from '@/lib/wagmi'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +30,7 @@ function TxStatus({ hash, error, pending, success }: { hash?: `0x${string}`; err
   if (error) return <p className="text-sm text-destructive">{errText(error)}</p>
   if (pending) return <p className="text-sm text-muted-foreground">Confirm in MetaMask…</p>
   if (hash && receipt.isLoading) return <p className="text-sm text-muted-foreground">Waiting for Monad…</p>
+  if (hash && receipt.data?.status === 'reverted') return <p className="text-sm text-destructive">Transaction reverted.</p>
   if (hash && receipt.isSuccess)
     return (
       <p className="text-sm text-emerald-700">
@@ -35,7 +38,7 @@ function TxStatus({ hash, error, pending, success }: { hash?: `0x${string}`; err
         <a className="underline" href={`${EXPLORER}/tx/${hash}`} target="_blank" rel="noreferrer">View on explorer</a>
       </p>
     )
-  if (hash && receipt.isError) return <p className="text-sm text-destructive">Transaction reverted.</p>
+  if (hash && (receipt.isError || receipt.data?.status === 'reverted')) return <p className="text-sm text-destructive">Transaction reverted.</p>
   return null
 }
 
@@ -110,6 +113,8 @@ export function ChallengeDetail({ id }: { id: number }) {
     setSigError(undefined)
     try {
       const sig = await signSolve(flag, id, address)
+      // Dry-run on our RPC first: a wrong flag reverts here and costs no gas.
+      await simulateContract(config, { ...ctf, functionName: 'submit', args: [BigInt(id), sig], account: address })
       write.writeContract({ ...ctf, functionName: 'submit', args: [BigInt(id), sig], gas: GAS.submit })
     } catch (err) {
       setSigError(err)
