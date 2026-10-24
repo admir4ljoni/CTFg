@@ -231,6 +231,11 @@ export function Admin() {
           <Input id="bounty" inputMode="decimal" value={bounty} onChange={(e) => setBounty(e.target.value)} placeholder="0" className="mt-1" />
           <p className="mt-1 text-xs text-muted-foreground">Escrowed in the contract. The first solver receives it minus a 5% platform fee.</p>
         </div>
+        {Number(id) >= 1 && Number(id) <= MAX_ID && (
+          <p className="text-xs text-muted-foreground">
+            Id {id} will appear as “{metaFor(Number(id)).title}”{challenges.some((c) => c.id === Number(id)) ? ' with its text from challenges.json. Use the flag that text describes.' : '.'}
+          </p>
+        )}
         {Number(id) > MAX_ID && <p className="text-sm text-destructive">Use an id from 1 to {MAX_ID}. Higher ids do not appear in the list.</p>}
         <Button type="submit" disabled={!address || !id || Number(id) < 1 || Number(id) > MAX_ID || !points || !flag || write.isPending}>Create challenge</Button>
         <TxStatus hash={write.data} error={write.error} pending={write.isPending} success="Challenge created." />
