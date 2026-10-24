@@ -10,6 +10,12 @@ export const ctfAbi = parseAbi([
   'function solved(uint256, address) view returns (bool)',
   'function score(address) view returns (uint256)',
   'event ChallengeCreated(uint256 indexed id, address indexed setter, uint32 points)',
+  'error Exists()',
+  'error Unknown()',
+  'error AlreadySolved()',
+  'error WrongFlag()',
+  'error NotOwner()',
+  'error PayFailed()',
   'event BountyAdded(uint256 indexed id, address indexed from, uint256 amount)',
   'event Solved(uint256 indexed id, address indexed player, uint32 points, uint256 bountyPaid, uint256 timestamp)',
 ])

@@ -27,6 +27,7 @@ function errText(e: unknown) {
     if (/WrongFlag/.test(e.message)) return 'Wrong flag. Nothing was recorded.'
     if (/AlreadySolved/.test(e.message)) return 'You already solved this one.'
     if (/Unknown/.test(e.message)) return 'This challenge is not on-chain yet.'
+    if (/Exists/.test(e.message)) return 'That id is already taken. Pick another.'
     return m
   }
   return String(e)
