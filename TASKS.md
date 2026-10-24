@@ -27,7 +27,7 @@ Times are targets from PLAN.md §10. Freeze 16:45.
 - [x] Test: bounty lands in solver balance, fee accrues, second solver gets points but no MON
 - [x] User redeploys + reverifies testnet; config + README updated
 - [x] Web: bounty shown on list and detail; admin top-up; solve toast shows MON received with explorer link
-- [ ] Deployed; user funds a challenge with 1 MON and solves it from a second wallet on the live URL
+- [x] Deployed; user funds a challenge with 1 MON and solves it from a second wallet on the live URL
 
 ## Slice 3 — Leaderboard and live feed (target 14:45)
 - [ ] Web: leaderboard from `Solved` events (history on load + WebSocket subscription), ranked by score, first-blood badge per challenge
