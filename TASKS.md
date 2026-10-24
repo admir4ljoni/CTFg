@@ -35,11 +35,11 @@ Times are targets from PLAN.md §10. Freeze 16:45.
 - [x] Deployed; two wallets solve, leaderboard reorders without refresh
 
 ## Slice 4 — Per-player on-chain instance level (target 15:15)
-- [ ] `Vulnerable.sol`: reentrancy or access-control bug, constructor takes player, exposes `isSolved()`
-- [ ] `CTF.sol`: `deployInstance(id)` emits `InstanceDeployed(id, player, addr)`, `submitInstance(id)` checks `isSolved()` then same points/bounty path
-- [ ] Test: deploy instance → exploit in test → submitInstance succeeds; unsolved instance reverts
-- [x] User redeploys + reverifies testnet; config + README updated
-- [ ] Web: instance challenge shows Deploy My Instance, instance address with explorer link, Submit button; `challenges.json` entry has `type: "instance"`
+- [x] `Vulnerable.sol`: reentrancy or access-control bug, constructor takes player, exposes `isSolved()`
+- [x] `CTF.sol`: `deployInstance(id)` emits `InstanceDeployed(id, player, addr)`, `submitInstance(id)` checks `isSolved()` then same points/bounty path
+- [x] Test: deploy instance → exploit in test → submitInstance succeeds; unsolved instance reverts
+- [ ] User redeploys + reverifies testnet; config + README updated
+- [x] Web: instance challenge shows Deploy My Instance, instance address with explorer link, Submit button; `challenges.json` entry has `type: "instance"`
 - [ ] Deployed; user deploys an instance, exploits it with `cast`, submits on the live URL
 - [ ] Create the 4 real challenges on testnet, fund 2 with bounties
 

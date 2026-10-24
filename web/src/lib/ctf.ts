@@ -11,6 +11,12 @@ export const ctfAbi = parseAbi([
   'function score(address) view returns (uint256)',
   'function getPlayers() view returns (address[])',
   'function firstBlood(uint256) view returns (address)',
+  'function deployInstance(uint256 id) returns (address)',
+  'function submitInstance(uint256 id)',
+  'function instances(uint256, address) view returns (address)',
+  'event InstanceDeployed(uint256 indexed id, address indexed player, address instance)',
+  'error NotInstance()',
+  'error NotSolved()',
   'event ChallengeCreated(uint256 indexed id, address indexed setter, uint32 points)',
   'error Exists()',
   'error Unknown()',
@@ -21,6 +27,9 @@ export const ctfAbi = parseAbi([
   'event BountyAdded(uint256 indexed id, address indexed from, uint256 amount)',
   'event Solved(uint256 indexed id, address indexed player, uint32 points, uint256 bountyPaid, uint256 timestamp)',
 ])
+
+// flagAddr sentinel for instance challenges, matches CTF.INSTANCE.
+export const INSTANCE = '0x0000000000000000000000000000000000000001' as const
 
 export type ChallengeMeta = {
   id: number

@@ -8,12 +8,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CTF_ADDRESS, EXPLORER } from '@/lib/config'
-import { IDS, MAX_ID, challenges, ctfAbi, flagAddress, metaFor, signSolve } from '@/lib/ctf'
+import { INSTANCE, IDS, MAX_ID, challenges, ctfAbi, flagAddress, metaFor, signSolve } from '@/lib/ctf'
 
 const ctf = { address: CTF_ADDRESS, abi: ctfAbi } as const
 // Explicit gas so MetaMask skips eth_estimateGas on the rate-limited public RPC.
 // Monad charges by gas limit, so keep these tight: forge reports submit ~182k worst case (first solver, first blood, payout), create ~71k, topUp ~31k.
-const GAS = { submit: 250_000n, create: 100_000n, topUp: 50_000n }
+// deployInstance ~231k, submitInstance ~183k.
+const GAS = { submit: 250_000n, create: 100_000n, topUp: 50_000n, deploy: 300_000n, submitInstance: 250_000n }
 const mon = (wei: bigint) => `${formatEther(wei)} MON`
 
 function solvedText(r: TransactionReceipt, points: number) {
@@ -27,6 +28,7 @@ function errText(e: unknown) {
     if (/WrongFlag/.test(e.message)) return 'Wrong flag. Nothing was recorded.'
     if (/AlreadySolved/.test(e.message)) return 'You already solved this one.'
     if (/Unknown/.test(e.message)) return 'This challenge is not on-chain yet.'
+    if (/NotSolved/.test(e.message)) return 'Your instance is not solved yet.'
     if (/Exists/.test(e.message)) return 'That id is already taken. Pick another.'
     return m
   }
@@ -177,8 +179,53 @@ export function ChallengeDetail({ id }: { id: number }) {
           </div>
         </form>
       )}
-      {c.type === 'instance' && <p className="mt-10 text-sm text-muted-foreground">Instance challenges arrive in the next release.</p>}
+      {c.type === 'instance' && <InstancePanel id={id} live={live} solved={done.data === true} points={onchain.data?.[1] ?? c.points} />}
     </article>
+  )
+}
+
+function InstancePanel({ id, live, solved, points }: { id: number; live: boolean; solved: boolean; points: number }) {
+  const { address } = useAccount()
+  const deploy = useWriteContract()
+  const sub = useWriteContract()
+  const [simError, setSimError] = useState<unknown>()
+  const inst = useReadContract({ ...ctf, functionName: 'instances', args: [BigInt(id), address!], query: { enabled: !!address } })
+  const addr = inst.data && inst.data !== '0x0000000000000000000000000000000000000000' ? inst.data : undefined
+
+  async function submit() {
+    setSimError(undefined)
+    try {
+      // Dry-run first: an undrained vault reverts here and costs no gas.
+      await simulateContract(config, { ...ctf, functionName: 'submitInstance', args: [BigInt(id)], account: address })
+      sub.writeContract({ ...ctf, functionName: 'submitInstance', args: [BigInt(id)], gas: GAS.submitInstance })
+    } catch (err) {
+      setSimError(err)
+    }
+  }
+
+  return (
+    <div className="mt-10 space-y-4">
+      {addr ? (
+        <p className="text-sm">
+          Your instance{' '}
+          <a className="break-all font-mono text-primary underline" href={`${EXPLORER}/address/${addr}`} target="_blank" rel="noreferrer">{addr}</a>
+        </p>
+      ) : (
+        <Button className="h-12 px-5" disabled={!address || !live || deploy.isPending} onClick={() => deploy.writeContract({ ...ctf, functionName: 'deployInstance', args: [BigInt(id)], gas: GAS.deploy })}>
+          Deploy my instance
+        </Button>
+      )}
+      <TxStatus hash={deploy.data} error={deploy.error} pending={deploy.isPending} success="Instance deployed." />
+      {addr && (
+        <>
+          <Button className="h-12 px-5" disabled={solved || sub.isPending} onClick={submit}>{solved ? 'Solved' : 'Submit instance'}</Button>
+          <TxStatus hash={sub.data} error={simError ?? sub.error} pending={sub.isPending} success={(r) => solvedText(r, points)} />
+        </>
+      )}
+      <p className="text-xs text-muted-foreground">
+        {!live ? 'This challenge is not on-chain yet. Create it from the Create page first.' : address ? 'The contract checks isSolved() on your instance. Exploit it with cast or any wallet, then submit.' : 'Connect MetaMask to play.'}
+      </p>
+    </div>
   )
 }
 
@@ -192,7 +239,8 @@ export function Admin() {
   const [topAmt, setTopAmt] = useState('')
   const write = useWriteContract()
   const top = useWriteContract()
-  const derived = flag ? flagAddress(flag) : undefined
+  const isInstance = metaFor(Number(id)).type === 'instance'
+  const derived = isInstance ? INSTANCE : flag ? flagAddress(flag) : undefined
 
   function create(e: React.FormEvent) {
     e.preventDefault()
@@ -221,11 +269,11 @@ export function Admin() {
             <Input id="points" inputMode="numeric" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="100" className="mt-1" />
           </div>
         </div>
-        <div>
+        {isInstance ? <p className="text-sm text-muted-foreground">Instance level: no flag. Players deploy their own vault and the contract checks it.</p> : <div>
           <label htmlFor="aflag" className="text-sm font-medium">Flag</label>
           <Input id="aflag" value={flag} onChange={(e) => setFlag(e.target.value)} placeholder="MONAD{...}" className="mt-1 font-mono" autoComplete="off" spellCheck={false} />
           {derived && <p className="mt-1 break-all font-mono text-xs text-muted-foreground">flag address {derived}</p>}
-        </div>
+        </div>}
         <div>
           <label htmlFor="bounty" className="text-sm font-medium">Bounty in MON (optional)</label>
           <Input id="bounty" inputMode="decimal" value={bounty} onChange={(e) => setBounty(e.target.value)} placeholder="0" className="mt-1" />
@@ -237,7 +285,7 @@ export function Admin() {
           </p>
         )}
         {Number(id) > MAX_ID && <p className="text-sm text-destructive">Use an id from 1 to {MAX_ID}. Higher ids do not appear in the list.</p>}
-        <Button type="submit" disabled={!address || !id || Number(id) < 1 || Number(id) > MAX_ID || !points || !flag || write.isPending}>Create challenge</Button>
+        <Button type="submit" disabled={!address || !id || Number(id) < 1 || Number(id) > MAX_ID || !points || !derived || write.isPending}>Create challenge</Button>
         <TxStatus hash={write.data} error={write.error} pending={write.isPending} success="Challenge created." />
       </form>
 
