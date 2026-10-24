@@ -8,9 +8,6 @@ Built solo at Monad Blitz Jogja Vol 2, 24 Oct 2026.
 
 - Site: https://midratama.my.id (also https://monad-ctf.vercel.app)
 - Contract (Monad Testnet, chain 10143): `0xE5c9941a6B8bca21d1d0654f719bD0e595934D9e` — [explorer](https://testnet.monadexplorer.com/address/0xE5c9941a6B8bca21d1d0654f719bD0e595934D9e)
-- Contract (Monad Mainnet, chain 143): _TBD_
-
-The site runs on testnet. The mainnet contract is the same code, deployed and verified.
 
 ## How it works
 
@@ -56,7 +53,7 @@ forge create src/CTF.sol:CTF --account <keystore> --rpc-url https://testnet-rpc.
 forge verify-contract <addr> src/CTF.sol:CTF --chain 10143 --verifier sourcify --verifier-url https://sourcify-api-monad.blockvision.org/
 ```
 
-Mainnet: `--rpc-url https://rpc.monad.xyz`, `--chain 143`. Put the new address in `web/src/lib/config.ts`.
+Put the new address in `web/src/lib/config.ts`.
 
 ## Layout
 

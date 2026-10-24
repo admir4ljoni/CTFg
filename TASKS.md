@@ -47,7 +47,7 @@ Times are targets from PLAN.md §10. Freeze 16:45.
 Default **no-go**. Go only if Slices 0–4 are all ticked and verified. Decision is final.
 
 ## Slice 5 — Mainnet, README, media (target 15:40 → 16:05)
-- [ ] User deploys + verifies on mainnet (chain 143) with `mainnet` keystore; README gets both addresses and explorer links
+- [~] CUT: mainnet deploy (out of time) (chain 143) with `mainnet` keystore; README gets both addresses and explorer links
 - [x] README: live URL, how to run `contracts/` and `web/` from a fresh clone, how to play, how to create a challenge; tested in a fresh clone
 - [ ] 30s+ demo video: real solve, payout on explorer, leaderboard moves
 - [ ] 15–20s ad video from same footage
