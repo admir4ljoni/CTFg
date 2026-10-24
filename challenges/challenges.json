@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "title": "Sanity Check",
+    "category": "warm-up",
+    "type": "flag",
+    "points": 50,
+    "text": "Welcome to Monad CTF. The flag is in the page source of this site. Format: MONAD{...}",
+    "hints": ["Ctrl+U"],
+    "files": []
+  },
+  {
+    "id": 2,
+    "title": "Caesar's Ledger",
+    "category": "crypto",
+    "type": "flag",
+    "points": 100,
+    "text": "ZBANQ{ebg13_vf_abg_rapelcgvba}",
+    "hints": ["Thirteen is a lucky number"],
+    "files": []
+  },
+  {
+    "id": 3,
+    "title": "Strings Attached",
+    "category": "reversing",
+    "type": "flag",
+    "points": 150,
+    "text": "A small binary checks your input. Find what it wants.",
+    "hints": ["strings is a tool, not a hint"],
+    "files": ["strings-attached"]
+  },
+  {
+    "id": 4,
+    "title": "Open Vault",
+    "category": "smart-contract",
+    "type": "instance",
+    "points": 200,
+    "text": "Deploy your personal Vault instance, drain it, then submit. The contract is verified on the explorer.",
+    "hints": ["Who is allowed to withdraw?"],
+    "files": []
+  }
+]
