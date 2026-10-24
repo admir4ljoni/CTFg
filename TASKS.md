@@ -5,12 +5,12 @@ Vertical slices. Each slice is end to end: contract → test → frontend → de
 Times are targets from PLAN.md §10. Freeze 16:45.
 
 ## Slice 0 — Skeleton live (target 13:30)
-- [ ] `contracts/` Foundry project builds (`forge build`), OpenZeppelin installed
-- [ ] `web/` Vite + React + TS + wagmi v3 + viem + shadcn + Tailwind, wallet connect to Monad Testnet (10143) works locally
-- [ ] `challenges/challenges.json` with 4 placeholder entries (1 warm-up, 2 crypto/reversing, 1 instance)
-- [ ] `.gitignore`, `README.md` stub with project name and live URL placeholder
-- [ ] `vercel link`, first deploy, custom domain + DNS CNAME added (user does DNS)
-- [ ] Empty site reachable on the custom domain
+- [x] `contracts/` Foundry project builds (`forge build`), OpenZeppelin installed
+- [x] `web/` Vite + React + TS + wagmi v3 + viem + shadcn + Tailwind, wallet connect to Monad Testnet (10143) works locally
+- [x] `challenges/challenges.json` with 4 placeholder entries (1 warm-up, 2 crypto/reversing, 1 instance)
+- [x] `.gitignore`, `README.md` stub with project name and live URL placeholder
+- [x] `vercel link`, first deploy, custom domain + DNS CNAME added (user does DNS)
+- [x] Empty site reachable on the custom domain
 
 ## Slice 1 — Flag solve pays points (target 14:00 contract, 14:45 UI)
 - [ ] `CTF.sol`: `createChallenge(id, flagAddr, points)`, `submit(id, sig)` with ECDSA recover of `keccak256(abi.encode(id, msg.sender))`, `score[player]`, `Solved` and `ChallengeCreated` events, double-solve reverts
