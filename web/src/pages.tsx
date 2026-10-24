@@ -10,16 +10,35 @@ import { Input } from '@/components/ui/input'
 import { CTF_ADDRESS, EXPLORER } from '@/lib/config'
 import vaultSource from '@/levels/OpenVault.sol?raw'
 import vaultCode from '@/levels/OpenVault.bin?raw'
-import { INSTANCE, IDS, MAX_ID, challenges, ctfAbi, flagAddress, metaFor, signSolve } from '@/lib/ctf'
+import lockerSource from '@/levels/PrivateLocker.sol?raw'
+import lockerCode from '@/levels/PrivateLocker.bin?raw'
+import { INSTANCE, ctfAbi, flagAddress, metaFor, signSolve, type Info } from '@/lib/ctf'
 
 const ctf = { address: CTF_ADDRESS, abi: ctfAbi } as const
 // Explicit gas so MetaMask skips eth_estimateGas on the rate-limited public RPC.
 // Monad charges by gas limit, so keep these tight: forge reports submit ~182k worst case (first solver, first blood, payout), create ~71k, topUp ~31k.
-// submitInstance ~183k. createInstanceChallenge and deployInstance scale with the organizer's bytecode, so those are estimated.
-const GAS = { submit: 250_000n, create: 100_000n, topUp: 50_000n, submitInstance: 250_000n }
+// submitInstance ~183k. Creates and deployInstance scale with text and with the organizer's bytecode, so those are estimated.
+const GAS = { submit: 250_000n, topUp: 50_000n, submitInstance: 250_000n }
 // Estimate on our RPC with 20% headroom; Monad charges the full limit, so no flat oversized constant.
 const estimate = async (req: EstimateContractGasParameters) => ((await getPublicClient(config).estimateContractGas(req)) * 12n) / 10n
 const mon = (wei: bigint) => `${formatEther(wei)} MON`
+type Row = readonly [string, number, number, string, bigint]
+
+// Every challenge 1..count with its on-chain row and text, in one multicall.
+function useChallenges() {
+  const count = useReadContract({ ...ctf, functionName: 'count' })
+  const ids = Array.from({ length: Number(count.data ?? 0n) }, (_, i) => i + 1)
+  const reads = useReadContracts({
+    contracts: ids.flatMap((id) => [
+      { ...ctf, functionName: 'challenges', args: [BigInt(id)] } as const,
+      { ...ctf, functionName: 'info', args: [BigInt(id)] } as const,
+    ]),
+  })
+  return ids.map((id, i) => {
+    const row = reads.data?.[2 * i]?.result as Row | undefined
+    return { id, row, c: metaFor(id, reads.data?.[2 * i + 1]?.result as Info | undefined, row?.[0] === INSTANCE) }
+  })
+}
 
 function solvedText(r: TransactionReceipt, points: number) {
   const paid = parseEventLogs({ abi: ctfAbi, eventName: 'Solved', logs: r.logs })[0]?.args.bountyPaid ?? 0n
@@ -33,7 +52,6 @@ function errText(e: unknown) {
     if (/AlreadySolved/.test(e.message)) return 'You already solved this one.'
     if (/Unknown/.test(e.message)) return 'This challenge is not on-chain yet.'
     if (/NotSolved/.test(e.message)) return 'Your instance is not solved yet.'
-    if (/Exists/.test(e.message)) return 'That id is already taken. Pick another.'
     return m
   }
   return String(e)
@@ -60,13 +78,7 @@ function TxStatus({ hash, error, pending, success }: { hash?: `0x${string}`; err
 
 export function ChallengeList() {
   const { address } = useAccount()
-  const onchain = useReadContracts({
-    contracts: IDS.map((id) => ({ ...ctf, functionName: 'challenges', args: [BigInt(id)] } as const)),
-  })
-  type Row = readonly [string, number, number, string, bigint]
-  const rows = IDS.map((id, i) => ({ id, row: onchain.data?.[i]?.result as Row | undefined }))
-  // JSON challenges always show; on-chain-only ones show once created.
-  const shown = rows.filter(({ id, row }) => challenges.some((c) => c.id === id) || (row && row[0] !== '0x0000000000000000000000000000000000000000'))
+  const shown = useChallenges()
   const mine = useReadContracts({
     contracts: shown.map(({ id }) => ({ ...ctf, functionName: 'solved', args: [BigInt(id), address!] } as const)),
     query: { enabled: !!address },
@@ -84,27 +96,27 @@ export function ChallengeList() {
         )}
       </div>
       <ol className="divide-y border-y">
-        {shown.map(({ id, row }, i) => {
-          const c = metaFor(id)
-          const live = row && row[0] !== '0x0000000000000000000000000000000000000000'
+        {shown.length === 0 && <li className="py-4 text-sm text-muted-foreground">No challenges yet. Make the first one on the Create page.</li>}
+        {shown.map(({ id, row, c }, i) => {
+          const live = !!row
           const done = mine.data?.[i]?.result === true
           return (
-            <li key={c.id}>
-              <a href={`#/c/${c.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 py-4 hover:bg-primary/5 -mx-3 px-3 rounded-md transition-colors">
+            <li key={id}>
+              <a href={`#/c/${id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 py-4 hover:bg-primary/5 -mx-3 px-3 rounded-md transition-colors">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{c.title}</span>
                     <Badge variant="secondary">{c.category}</Badge>
                     {done && <Badge className="bg-emerald-600 text-white">solved</Badge>}
                     {!live && <Badge variant="outline">not deployed</Badge>}
-                    {live && row[4] > 0n && <Badge className="bg-amber-500 text-white">{mon(row[4])} bounty</Badge>}
+                    {row && row[4] > 0n && <Badge className="bg-amber-500 text-white">{mon(row[4])} bounty</Badge>}
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {live ? `${row[2]} solve${row[2] === 1 ? '' : 's'}` : 'Waiting for the setter'}
+                    {row ? `${row[2]} solve${row[2] === 1 ? '' : 's'}` : 'Loading…'}
                   </p>
                 </div>
                 <div className="text-right tabular-nums">
-                  <div className="text-2xl font-semibold text-primary">{live ? row[1] : c.points}</div>
+                  <div className="text-2xl font-semibold text-primary">{row?.[1] ?? '–'}</div>
                   <div className="text-xs text-muted-foreground">points</div>
                 </div>
               </a>
@@ -117,7 +129,6 @@ export function ChallengeList() {
 }
 
 export function ChallengeDetail({ id }: { id: number }) {
-  const c = metaFor(id)
   const { address } = useAccount()
   const [flag, setFlag] = useState('')
   const [showHint, setShowHint] = useState(false)
@@ -125,8 +136,11 @@ export function ChallengeDetail({ id }: { id: number }) {
   const write = useWriteContract()
   const onchain = useReadContract({ ...ctf, functionName: 'challenges', args: [BigInt(id)] })
   const done = useReadContract({ ...ctf, functionName: 'solved', args: [BigInt(id), address!], query: { enabled: !!address } })
+  const info = useReadContract({ ...ctf, functionName: 'info', args: [BigInt(id)] })
   const live = !!onchain.data && onchain.data[0] !== '0x0000000000000000000000000000000000000000'
-  const isInstance = live ? onchain.data![0] === INSTANCE : c.type === 'instance'
+  const isInstance = onchain.data?.[0] === INSTANCE
+  const c = metaFor(id, info.data, isInstance)
+  const points = onchain.data?.[1] ?? 0
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -150,20 +164,13 @@ export function ChallengeDetail({ id }: { id: number }) {
         <Badge variant="secondary">{c.category}</Badge>
       </div>
       <p className="mt-1 text-sm text-muted-foreground tabular-nums">
-        {onchain.data?.[1] ?? c.points} points · {onchain.data?.[2] ?? 0} solves
+        {points} points · {onchain.data?.[2] ?? 0} solves
         {!!onchain.data?.[4] && <> · <span className="font-semibold text-amber-600">{mon(onchain.data[4])} bounty</span> to the next solver</>}
       </p>
       <p className="mt-6 whitespace-pre-wrap leading-relaxed">{c.text}</p>
-      {c.files.length > 0 && (
-        <ul className="mt-4 text-sm">
-          {c.files.map((f) => (
-            <li key={f}><a className="text-primary underline" href={`/files/${f}`} download>{f}</a></li>
-          ))}
-        </ul>
-      )}
-      {c.hints.length > 0 && (
+      {c.hint && (
         <div className="mt-4 text-sm">
-          {showHint ? <p className="text-muted-foreground">Hint: {c.hints[0]}</p> : <button className="text-muted-foreground underline" onClick={() => setShowHint(true)}>Show hint</button>}
+          {showHint ? <p className="text-muted-foreground">Hint: {c.hint}</p> : <button className="text-muted-foreground underline" onClick={() => setShowHint(true)}>Show hint</button>}
         </div>
       )}
 
@@ -180,11 +187,11 @@ export function ChallengeDetail({ id }: { id: number }) {
             {!live ? 'This challenge is not on-chain yet. Create it from the Create page first.' : address ? 'Your flag is signed locally and never sent anywhere. Only the signature goes on-chain.' : 'Connect MetaMask to submit.'}
           </p>
           <div className="mt-3">
-            <TxStatus hash={write.data} error={sigError ?? write.error} pending={write.isPending} success={(r) => solvedText(r, onchain.data?.[1] ?? c.points)} />
+            <TxStatus hash={write.data} error={sigError ?? write.error} pending={write.isPending} success={(r) => solvedText(r, points)} />
           </div>
         </form>
       )}
-      {isInstance && <InstancePanel id={id} live={live} solved={done.data === true} points={onchain.data?.[1] ?? c.points} />}
+      {isInstance && <InstancePanel id={id} live={live} solved={done.data === true} points={points} />}
     </article>
   )
 }
@@ -252,33 +259,64 @@ function InstancePanel({ id, live, solved, points }: { id: number; live: boolean
   )
 }
 
+const EXAMPLES = {
+  'Open Vault': {
+    title: 'Open Vault', points: '200', source: vaultSource, code: vaultCode,
+    text: 'Your personal vault holds 100 credits. Drain it to zero, then submit. The level source is below.',
+    hint: 'Who is allowed to withdraw?',
+  },
+  'Private Locker': {
+    title: 'Private Locker', points: '300', source: lockerSource, code: lockerCode,
+    text: 'Your locker opens with a password only it knows. It is marked private, so it must be safe. Unlock it, then submit.',
+    hint: 'private is a visibility keyword, not encryption. Everything in contract storage is public.',
+  },
+}
+
+const field = 'mt-1 w-full rounded-md border bg-transparent p-3 text-sm'
+
+function createdText(r: TransactionReceipt) {
+  const id = parseEventLogs({ abi: ctfAbi, eventName: 'ChallengeCreated', logs: r.logs })[0]?.args.id
+  return id === undefined ? 'Challenge created.' : `Challenge #${id} created.`
+}
+
 export function Admin() {
   const { address } = useAccount()
-  const [id, setId] = useState('')
+  const [kind, setKind] = useState<'flag' | 'instance'>('flag')
+  const [title, setTitle] = useState('')
+  const [text, setText] = useState('')
+  const [hint, setHint] = useState('')
   const [points, setPoints] = useState('')
   const [flag, setFlag] = useState('')
   const [bounty, setBounty] = useState('')
+  const [source, setSource] = useState('')
+  const [code, setCode] = useState('')
+  const [estError, setEstError] = useState<unknown>()
   const [topId, setTopId] = useState('')
   const [topAmt, setTopAmt] = useState('')
   const write = useWriteContract()
   const top = useWriteContract()
-  const [kindSel, setKind] = useState<'flag' | 'instance'>()
-  const [source, setSource] = useState('')
-  const [code, setCode] = useState('')
-  const [estError, setEstError] = useState<unknown>()
-  const kind = kindSel ?? metaFor(Number(id)).type
   const derived = flag ? flagAddress(flag) : undefined
   const codeOk = /^0x([0-9a-fA-F]{2})+$/.test(code.trim())
-  const ready = kind === 'instance' ? codeOk && !!source.trim() : !!derived
+  const ready = !!title.trim() && Number(points) > 0 && (kind === 'instance' ? codeOk && !!source.trim() : !!derived)
+
+  function load(name: keyof typeof EXAMPLES) {
+    const e = EXAMPLES[name]
+    setKind('instance'); setTitle(e.title); setText(e.text); setHint(e.hint); setPoints(e.points); setSource(e.source); setCode(e.code.trim())
+  }
 
   async function create(e: React.FormEvent) {
     e.preventDefault()
     setEstError(undefined)
     const value = parseEther(bounty || '0')
-    if (kind === 'flag') return write.writeContract({ ...ctf, functionName: 'createChallenge', args: [BigInt(id), derived!, Number(points)], value, gas: GAS.create })
+    const i = { title: title.trim(), text: text.trim(), hint: hint.trim() }
     try {
-      const req = { ...ctf, functionName: 'createInstanceChallenge', args: [BigInt(id), Number(points), code.trim() as `0x${string}`, source], value, account: address } as const
-      write.writeContract({ ...req, gas: await estimate(req) })
+      if (kind === 'flag') {
+        const req = { ...ctf, functionName: 'createChallenge', args: [derived!, Number(points), i], value, account: address } as const
+        write.writeContract({ ...req, gas: await estimate(req) })
+      } else {
+        const req = { ...ctf, functionName: 'createInstanceChallenge', args: [Number(points), code.trim() as `0x${string}`, source, i], value, account: address } as const
+        write.writeContract({ ...req, gas: await estimate(req) })
+      }
     } catch (err) {
       setEstError(err)
     }
@@ -293,19 +331,9 @@ export function Admin() {
     <section className="max-w-xl">
       <h2 className="text-3xl font-semibold tracking-tight">Create a challenge</h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        The flag is hashed in your browser. The contract only ever sees the address derived from it.
+        Everything is stored on-chain. A flag is hashed in your browser; the contract only ever sees the address derived from it.
       </p>
       <form onSubmit={create} className="mt-8 space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="id" className="text-sm font-medium">Challenge id</label>
-            <Input id="id" inputMode="numeric" value={id} onChange={(e) => setId(e.target.value)} placeholder="1" className="mt-1" />
-          </div>
-          <div>
-            <label htmlFor="points" className="text-sm font-medium">Points</label>
-            <Input id="points" inputMode="numeric" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="100" className="mt-1" />
-          </div>
-        </div>
         <div className="flex gap-2" role="radiogroup" aria-label="Challenge type">
           {(['flag', 'instance'] as const).map((k) => (
             <Button key={k} type="button" role="radio" aria-checked={kind === k} variant={kind === k ? 'default' : 'outline'} onClick={() => setKind(k)}>
@@ -313,43 +341,61 @@ export function Admin() {
             </Button>
           ))}
         </div>
+        <div>
+          <label htmlFor="title" className="text-sm font-medium">Name</label>
+          <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Caesar's Ledger" className="mt-1" />
+        </div>
+        <div>
+          <label htmlFor="text" className="text-sm font-medium">Description</label>
+          <textarea id="text" value={text} onChange={(e) => setText(e.target.value)} rows={4} className={field} placeholder="What the player sees. Put ciphertext, links or instructions here." />
+        </div>
+        <div>
+          <label htmlFor="hint" className="text-sm font-medium">Hint (optional)</label>
+          <Input id="hint" value={hint} onChange={(e) => setHint(e.target.value)} placeholder="Hidden until the player clicks Show hint" className="mt-1" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="points" className="text-sm font-medium">Points</label>
+            <Input id="points" inputMode="numeric" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="100" className="mt-1" />
+          </div>
+          <div>
+            <label htmlFor="bounty" className="text-sm font-medium">Bounty in MON (optional)</label>
+            <Input id="bounty" inputMode="decimal" value={bounty} onChange={(e) => setBounty(e.target.value)} placeholder="0" className="mt-1" />
+          </div>
+        </div>
+        <p className="-mt-2 text-xs text-muted-foreground">The bounty is escrowed in the contract. The first solver receives it minus a 5% platform fee.</p>
+
         {kind === 'instance' ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Each player gets their own copy of your contract. It must have <code className="font-mono">constructor(address player)</code> and <code className="font-mono">isSolved() returns (bool)</code>.{' '}
-              <button type="button" className="text-primary underline" onClick={() => { setSource(vaultSource); setCode(vaultCode.trim()) }}>Load example: Open Vault</button>
+              Each player gets their own copy of your contract. It must have <code className="font-mono">constructor(address player)</code> and <code className="font-mono">isSolved() returns (bool)</code>.
+              {' '}Load an example:{' '}
+              {(Object.keys(EXAMPLES) as (keyof typeof EXAMPLES)[]).map((n, i) => (
+                <span key={n}>{i > 0 && ' · '}<button type="button" className="text-primary underline" onClick={() => load(n)}>{n}</button></span>
+              ))}
             </p>
             <div>
               <label htmlFor="src" className="text-sm font-medium">Solidity source (shown to players)</label>
-              <textarea id="src" value={source} onChange={(e) => setSource(e.target.value)} rows={10} spellCheck={false} className="mt-1 w-full rounded-md border bg-transparent p-3 font-mono text-xs" placeholder="// SPDX-License-Identifier: MIT&#10;pragma solidity ^0.8.20;&#10;contract Level { ... }" />
+              <textarea id="src" value={source} onChange={(e) => setSource(e.target.value)} rows={10} spellCheck={false} className={`${field} font-mono text-xs`} placeholder="pragma solidity ^0.8.20;&#10;contract Level { ... }" />
             </div>
             <div>
               <label htmlFor="code" className="text-sm font-medium">Creation bytecode</label>
-              <textarea id="code" value={code} onChange={(e) => setCode(e.target.value)} rows={4} spellCheck={false} className="mt-1 w-full break-all rounded-md border bg-transparent p-3 font-mono text-xs" placeholder="0x6080..." />
+              <textarea id="code" value={code} onChange={(e) => setCode(e.target.value)} rows={4} spellCheck={false} className={`${field} break-all font-mono text-xs`} placeholder="0x6080..." />
               <p className="mt-1 text-xs text-muted-foreground">
                 From <code className="font-mono">forge inspect src/Level.sol:Level bytecode</code>, or Remix → Compile → Bytecode → "object" (add 0x).
                 {code && !codeOk && <span className="text-destructive"> Must be 0x followed by hex.</span>}
               </p>
             </div>
           </div>
-        ) : <div>
-          <label htmlFor="aflag" className="text-sm font-medium">Flag</label>
-          <Input id="aflag" value={flag} onChange={(e) => setFlag(e.target.value)} placeholder="MONAD{...}" className="mt-1 font-mono" autoComplete="off" spellCheck={false} />
-          {derived && <p className="mt-1 break-all font-mono text-xs text-muted-foreground">flag address {derived}</p>}
-        </div>}
-        <div>
-          <label htmlFor="bounty" className="text-sm font-medium">Bounty in MON (optional)</label>
-          <Input id="bounty" inputMode="decimal" value={bounty} onChange={(e) => setBounty(e.target.value)} placeholder="0" className="mt-1" />
-          <p className="mt-1 text-xs text-muted-foreground">Escrowed in the contract. The first solver receives it minus a 5% platform fee.</p>
-        </div>
-        {Number(id) >= 1 && Number(id) <= MAX_ID && (
-          <p className="text-xs text-muted-foreground">
-            Id {id} will appear as “{metaFor(Number(id)).title}”{challenges.some((c) => c.id === Number(id)) ? ' with its text from challenges.json. Use the flag that text describes.' : '.'}
-          </p>
+        ) : (
+          <div>
+            <label htmlFor="aflag" className="text-sm font-medium">Flag</label>
+            <Input id="aflag" value={flag} onChange={(e) => setFlag(e.target.value)} placeholder="MONAD{...}" className="mt-1 font-mono" autoComplete="off" spellCheck={false} />
+            {derived && <p className="mt-1 break-all font-mono text-xs text-muted-foreground">flag address {derived}</p>}
+          </div>
         )}
-        {Number(id) > MAX_ID && <p className="text-sm text-destructive">Use an id from 1 to {MAX_ID}. Higher ids do not appear in the list.</p>}
-        <Button type="submit" disabled={!address || !id || Number(id) < 1 || Number(id) > MAX_ID || !points || !ready || write.isPending}>Create challenge</Button>
-        <TxStatus hash={write.data} error={estError ?? write.error} pending={write.isPending} success="Challenge created." />
+        <Button type="submit" disabled={!address || !ready || write.isPending}>Create challenge</Button>
+        <TxStatus hash={write.data} error={estError ?? write.error} pending={write.isPending} success={createdText} />
       </form>
 
       <h2 className="mt-16 text-3xl font-semibold tracking-tight">Top up a bounty</h2>
@@ -391,7 +437,8 @@ export function Leaderboard() {
   // A 0-point solve can list a player twice; dedupe here.
   const list = [...new Set(players.data ?? [])]
   const scores = useReadContracts({ contracts: list.map((p) => ({ ...ctf, functionName: 'score', args: [p] } as const)) })
-  const bloods = useReadContracts({ contracts: IDS.map((id) => ({ ...ctf, functionName: 'firstBlood', args: [BigInt(id)] } as const)) })
+  const all = useChallenges()
+  const bloods = useReadContracts({ contracts: all.map(({ id }) => ({ ...ctf, functionName: 'firstBlood', args: [BigInt(id)] } as const)) })
   const bloodCount = (p: string) => bloods.data?.filter((b) => b.result === p).length ?? 0
   const ranked = list
     .map((p, i) => ({ p, score: (scores.data?.[i]?.result as bigint | undefined) ?? 0n }))
@@ -429,7 +476,7 @@ export function Leaderboard() {
             {feed.map((f) => (
               <li key={f.tx + f.id}>
                 <a className="hover:underline" href={`${EXPLORER}/tx/${f.tx}`} target="_blank" rel="noreferrer">
-                  <span className="font-mono">{short(f.player)}</span> solved {metaFor(f.id).title} <span className="text-primary">+{f.points}</span>
+                  <span className="font-mono">{short(f.player)}</span> solved {all.find((x) => x.id === f.id)?.c.title ?? `#${f.id}`} <span className="text-primary">+{f.points}</span>
                   {f.paid > 0n && <span className="text-amber-600"> · {mon(f.paid)}</span>}
                 </a>
               </li>

@@ -24,4 +24,4 @@ cd web && npm install && npm run dev
 
 - `contracts/` Foundry: `src/CTF.sol`, `src/Vulnerable.sol`, `test/CTF.t.sol`
 - `web/` Vite + React + wagmi, MetaMask only
-- `web/challenges/` challenge text; files in `web/public/files/`; points and solves come from the contract
+- Challenges (name, description, hint, points, bounty, level source) are created from the site's Create page and stored on-chain; files go in `web/public/files/` and are linked from the description

@@ -11,7 +11,7 @@ Monad CTF: an on-chain Capture The Flag platform. Players prove solves to a smar
 ```
 contracts/   Foundry project. src/CTF.sol (single contract), src/Vulnerable.sol (instance level), test/CTF.t.sol
 web/         Vite + React + TS, wagmi v3 + viem, shadcn + Tailwind, MetaMask injected connector only
-web/challenges/  challenges.json (id, title, category, points, text, hints). Files go in web/public/files/. Numbers come from the contract, text from here
+Challenge text (title, description, hint) is on-chain in `CTF.info`, written by the Create page. Files go in web/public/files/ and are linked from the description
 README.md    must hold live URL, testnet + mainnet addresses, explorer links, run steps
 ```
 
@@ -47,7 +47,7 @@ Networks: testnet chain 10143 `https://testnet-rpc.monad.xyz` / `wss://testnet-r
 ## Architecture that spans files
 
 - **Flag proof.** Flag never touches the chain. `web/` derives `key = keccak256(flag)` and its address; the setter stores only that address in the contract. A solver signs `keccak256(abi.encode(challengeId, msg.sender))` with the same key; `CTF.submit` recovers the signer with OpenZeppelin ECDSA. The signed message includes the solver's address, which is what prevents mempool copying. Any change to the message layout must be made in both `web/` signing code and `CTF.sol` together.
-- **Instances.** `CTF.deployInstance` does `new Vulnerable(msg.sender)`; `CTF.submitInstance` trusts `Vulnerable.isSolved()`. Adding a level means a new contract exposing `isSolved()` and an entry in `challenges.json` with `type: "instance"`.
+- **Instances.** `CTF.deployInstance` does `new Vulnerable(msg.sender)`; `CTF.submitInstance` trusts `Vulnerable.isSolved()`. A level is any contract with `constructor(address player)` and `isSolved()`; the Create page uploads its bytecode and source on-chain (`createInstanceChallenge`). Examples live in contracts/src and are copied to web/src/levels.
 - **Events are the API.** `Solved`, `ChallengeCreated`, `InstanceDeployed` drive the leaderboard and live feed. Adding UI state usually means adding or extending an event, not adding storage getters.
 - **Money.** Bounty rule is first-solver-takes-all minus a constant platform fee. Checks-effects-interactions on every payout. Owner can withdraw only accumulated fees.
 - **Contract address** lives in one place in `web/` (a config file); redeploys change only that and the README.
