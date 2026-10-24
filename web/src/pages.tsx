@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAccount, useReadContract, useReadContracts, useWaitForTransactionReceipt, useWriteContract } from 'wagmi'
-import { BaseError } from 'viem'
+import { BaseError, formatEther, parseEther, parseEventLogs, type TransactionReceipt } from 'viem'
 import { simulateContract } from 'wagmi/actions'
 import { config } from '@/lib/wagmi'
 import { Badge } from '@/components/ui/badge'
@@ -12,8 +12,14 @@ import { challenges, ctfAbi, flagAddress, signSolve } from '@/lib/ctf'
 
 const ctf = { address: CTF_ADDRESS, abi: ctfAbi } as const
 // Explicit gas so MetaMask skips eth_estimateGas on the rate-limited public RPC.
-// Monad charges by gas limit, so keep these tight: forge reports submit ~113k, create ~71k.
-const GAS = { submit: 150_000n, create: 100_000n }
+// Monad charges by gas limit, so keep these tight: forge reports submit ~115k with payout, create ~71k, topUp ~31k.
+const GAS = { submit: 150_000n, create: 100_000n, topUp: 50_000n }
+const mon = (wei: bigint) => `${formatEther(wei)} MON`
+
+function solvedText(r: TransactionReceipt, points: number) {
+  const paid = parseEventLogs({ abi: ctfAbi, eventName: 'Solved', logs: r.logs })[0]?.args.bountyPaid ?? 0n
+  return `Solved. +${points} points${paid > 0n ? ` and ${mon(paid)} sent to your wallet` : ''}.`
+}
 
 function errText(e: unknown) {
   if (e instanceof BaseError) {
@@ -26,7 +32,7 @@ function errText(e: unknown) {
   return String(e)
 }
 
-function TxStatus({ hash, error, pending, success }: { hash?: `0x${string}`; error: unknown; pending: boolean; success?: string }) {
+function TxStatus({ hash, error, pending, success }: { hash?: `0x${string}`; error: unknown; pending: boolean; success?: string | ((r: TransactionReceipt) => string) }) {
   const receipt = useWaitForTransactionReceipt({ hash })
   const qc = useQueryClient()
   useEffect(() => { if (receipt.isSuccess) qc.invalidateQueries() }, [receipt.isSuccess, qc])
@@ -37,7 +43,7 @@ function TxStatus({ hash, error, pending, success }: { hash?: `0x${string}`; err
   if (hash && receipt.isSuccess)
     return (
       <p className="text-sm text-emerald-700">
-        {success ?? 'Confirmed.'}{' '}
+        {typeof success === 'function' ? success(receipt.data) : success ?? 'Confirmed.'}{' '}
         <a className="underline" href={`${EXPLORER}/tx/${hash}`} target="_blank" rel="noreferrer">View on explorer</a>
       </p>
     )
@@ -68,7 +74,7 @@ export function ChallengeList() {
       </div>
       <ol className="divide-y border-y">
         {challenges.map((c, i) => {
-          const row = onchain.data?.[i]?.result as readonly [string, number, number, string] | undefined
+          const row = onchain.data?.[i]?.result as readonly [string, number, number, string, bigint] | undefined
           const live = row && row[0] !== '0x0000000000000000000000000000000000000000'
           const done = mine.data?.[i]?.result === true
           return (
@@ -80,6 +86,7 @@ export function ChallengeList() {
                     <Badge variant="secondary">{c.category}</Badge>
                     {done && <Badge className="bg-emerald-600 text-white">solved</Badge>}
                     {!live && <Badge variant="outline">not deployed</Badge>}
+                    {live && row[4] > 0n && <Badge className="bg-amber-500 text-white">{mon(row[4])} bounty</Badge>}
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {live ? `${row[2]} solve${row[2] === 1 ? '' : 's'}` : 'Waiting for the setter'}
@@ -133,6 +140,7 @@ export function ChallengeDetail({ id }: { id: number }) {
       </div>
       <p className="mt-1 text-sm text-muted-foreground tabular-nums">
         {onchain.data?.[1] ?? c.points} points · {onchain.data?.[2] ?? 0} solves
+        {!!onchain.data?.[4] && <> · <span className="font-semibold text-amber-600">{mon(onchain.data[4])} bounty</span> to the next solver</>}
       </p>
       <p className="mt-6 whitespace-pre-wrap leading-relaxed">{c.text}</p>
       {c.files.length > 0 && (
@@ -161,7 +169,7 @@ export function ChallengeDetail({ id }: { id: number }) {
             {!live ? 'This challenge is not on-chain yet. Create it from the Create page first.' : address ? 'Your flag is signed locally and never sent anywhere. Only the signature goes on-chain.' : 'Connect MetaMask to submit.'}
           </p>
           <div className="mt-3">
-            <TxStatus hash={write.data} error={sigError ?? write.error} pending={write.isPending} success={`Solved. +${onchain.data?.[1] ?? c.points} points.`} />
+            <TxStatus hash={write.data} error={sigError ?? write.error} pending={write.isPending} success={(r) => solvedText(r, onchain.data?.[1] ?? c.points)} />
           </div>
         </form>
       )}
@@ -175,12 +183,21 @@ export function Admin() {
   const [id, setId] = useState('')
   const [points, setPoints] = useState('')
   const [flag, setFlag] = useState('')
+  const [bounty, setBounty] = useState('')
+  const [topId, setTopId] = useState('')
+  const [topAmt, setTopAmt] = useState('')
   const write = useWriteContract()
+  const top = useWriteContract()
   const derived = flag ? flagAddress(flag) : undefined
 
   function create(e: React.FormEvent) {
     e.preventDefault()
-    write.writeContract({ ...ctf, functionName: 'createChallenge', args: [BigInt(id), derived!, Number(points)], gas: GAS.create })
+    write.writeContract({ ...ctf, functionName: 'createChallenge', args: [BigInt(id), derived!, Number(points)], value: parseEther(bounty || '0'), gas: GAS.create })
+  }
+
+  function topUp(e: React.FormEvent) {
+    e.preventDefault()
+    top.writeContract({ ...ctf, functionName: 'topUp', args: [BigInt(topId)], value: parseEther(topAmt), gas: GAS.topUp })
   }
 
   return (
@@ -205,8 +222,29 @@ export function Admin() {
           <Input id="aflag" value={flag} onChange={(e) => setFlag(e.target.value)} placeholder="MONAD{...}" className="mt-1 font-mono" autoComplete="off" spellCheck={false} />
           {derived && <p className="mt-1 break-all font-mono text-xs text-muted-foreground">flag address {derived}</p>}
         </div>
+        <div>
+          <label htmlFor="bounty" className="text-sm font-medium">Bounty in MON (optional)</label>
+          <Input id="bounty" inputMode="decimal" value={bounty} onChange={(e) => setBounty(e.target.value)} placeholder="0" className="mt-1" />
+          <p className="mt-1 text-xs text-muted-foreground">Escrowed in the contract. The first solver receives it minus a 5% platform fee.</p>
+        </div>
         <Button type="submit" disabled={!address || !id || !points || !flag || write.isPending}>Create challenge</Button>
         <TxStatus hash={write.data} error={write.error} pending={write.isPending} success="Challenge created." />
+      </form>
+
+      <h2 className="mt-16 text-3xl font-semibold tracking-tight">Top up a bounty</h2>
+      <form onSubmit={topUp} className="mt-6 space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="tid" className="text-sm font-medium">Challenge id</label>
+            <Input id="tid" inputMode="numeric" value={topId} onChange={(e) => setTopId(e.target.value)} placeholder="1" className="mt-1" />
+          </div>
+          <div>
+            <label htmlFor="tamt" className="text-sm font-medium">MON</label>
+            <Input id="tamt" inputMode="decimal" value={topAmt} onChange={(e) => setTopAmt(e.target.value)} placeholder="1" className="mt-1" />
+          </div>
+        </div>
+        <Button type="submit" disabled={!address || !topId || !Number(topAmt) || top.isPending}>Add to bounty</Button>
+        <TxStatus hash={top.data} error={top.error} pending={top.isPending} success="Bounty added." />
       </form>
     </section>
   )

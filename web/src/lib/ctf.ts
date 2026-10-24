@@ -3,12 +3,14 @@ import { privateKeyToAccount } from 'viem/accounts'
 import challengesJson from '../../challenges/challenges.json'
 
 export const ctfAbi = parseAbi([
-  'function createChallenge(uint256 id, address flagAddr, uint32 points)',
+  'function createChallenge(uint256 id, address flagAddr, uint32 points) payable',
+  'function topUp(uint256 id) payable',
   'function submit(uint256 id, bytes sig)',
-  'function challenges(uint256) view returns (address flagAddr, uint32 points, uint32 solves, address setter)',
+  'function challenges(uint256) view returns (address flagAddr, uint32 points, uint32 solves, address setter, uint96 bounty)',
   'function solved(uint256, address) view returns (bool)',
   'function score(address) view returns (uint256)',
   'event ChallengeCreated(uint256 indexed id, address indexed setter, uint32 points)',
+  'event BountyAdded(uint256 indexed id, address indexed from, uint256 amount)',
   'event Solved(uint256 indexed id, address indexed player, uint32 points, uint256 bountyPaid, uint256 timestamp)',
 ])
 
