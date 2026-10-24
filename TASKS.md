@@ -41,7 +41,7 @@ Times are targets from PLAN.md §10. Freeze 16:45.
 - [x] User redeploys + reverifies testnet; config + README updated
 - [x] Web: instance challenge shows Deploy My Instance, instance address with explorer link, Submit button; `challenges.json` entry has `type: "instance"`
 - [x] Deployed; user deploys an instance, exploits it with `cast`, submits on the live URL
-- [ ] Create the 4 real challenges on testnet, fund 2 with bounties
+- [x] Create the 4 real challenges on testnet, fund 2 with bounties
 
 ## Checkpoint 15:15 — Tournament go/no-go
 Default **no-go**. Go only if Slices 0–4 are all ticked and verified. Decision is final.
