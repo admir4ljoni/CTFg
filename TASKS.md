@@ -30,9 +30,9 @@ Times are targets from PLAN.md §10. Freeze 16:45.
 - [x] Deployed; user funds a challenge with 1 MON and solves it from a second wallet on the live URL
 
 ## Slice 3 — Leaderboard and live feed (target 14:45)
-- [ ] Web: leaderboard from `Solved` events (history on load + WebSocket subscription), ranked by score, first-blood badge per challenge
-- [ ] Web: live feed panel showing solves as they land
-- [ ] Deployed; two wallets solve, leaderboard reorders without refresh
+- [x] Web: leaderboard from `Solved` events (history on load + WebSocket subscription), ranked by score, first-blood badge per challenge
+- [x] Web: live feed panel showing solves as they land
+- [x] Deployed; two wallets solve, leaderboard reorders without refresh
 
 ## Slice 4 — Per-player on-chain instance level (target 15:15)
 - [ ] `Vulnerable.sol`: reentrancy or access-control bug, constructor takes player, exposes `isSolved()`
