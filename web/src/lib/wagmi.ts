@@ -4,8 +4,12 @@ import { injected } from 'wagmi/connectors'
 
 // Public RPC allows 50 req/s per IP, shared with MetaMask on the same machine.
 // Multicall collapses every read into one call; 1s polling keeps the UI live without bursts.
+// Wallets that don't have Monad Testnet get it added with Ankr, not the official RPC: MetaMask
+// sends the tx through its own RPC, and the official one rate-limits the shared venue IP.
+const testnet = { ...monadTestnet, rpcUrls: { default: { http: ['https://rpc.ankr.com/monad_testnet'] } } }
+
 export const config = createConfig({
-  chains: [monadTestnet],
+  chains: [testnet],
   connectors: [injected()],
   batch: { multicall: true },
   pollingInterval: 1_000,
