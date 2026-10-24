@@ -99,6 +99,7 @@ export function ChallengeDetail({ id }: { id: number }) {
   const onchain = useReadContract({ ...ctf, functionName: 'challenges', args: [BigInt(id)] })
   const done = useReadContract({ ...ctf, functionName: 'solved', args: [BigInt(id), address!], query: { enabled: !!address } })
   if (!c) return <p>No such challenge.</p>
+  const live = !!onchain.data && onchain.data[0] !== '0x0000000000000000000000000000000000000000'
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -141,12 +142,12 @@ export function ChallengeDetail({ id }: { id: number }) {
           <label htmlFor="flag" className="text-sm font-medium">Flag</label>
           <div className="mt-2 flex gap-2">
             <Input id="flag" value={flag} onChange={(e) => setFlag(e.target.value)} placeholder="MONAD{...}" className="h-12 font-mono text-base" autoComplete="off" spellCheck={false} disabled={done.data === true} />
-            <Button type="submit" className="h-12 px-5" disabled={!address || !flag || write.isPending || done.data === true}>
+            <Button type="submit" className="h-12 px-5" disabled={!address || !flag || !live || write.isPending || done.data === true}>
               {done.data ? 'Solved' : 'Submit flag'}
             </Button>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            {address ? 'Your flag is signed locally and never sent anywhere. Only the signature goes on-chain.' : 'Connect MetaMask to submit.'}
+            {!live ? 'This challenge is not on-chain yet. Create it from the Create page first.' : address ? 'Your flag is signed locally and never sent anywhere. Only the signature goes on-chain.' : 'Connect MetaMask to submit.'}
           </p>
           <div className="mt-3">
             <TxStatus hash={write.data} error={sigError ?? write.error} pending={write.isPending} success={`Solved. +${onchain.data?.[1] ?? c.points} points.`} />
