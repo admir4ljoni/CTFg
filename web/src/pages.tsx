@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CTF_ADDRESS, EXPLORER } from '@/lib/config'
-import { challenges, ctfAbi, flagAddress, signSolve } from '@/lib/ctf'
+import { IDS, MAX_ID, challenges, ctfAbi, flagAddress, metaFor, signSolve } from '@/lib/ctf'
 
 const ctf = { address: CTF_ADDRESS, abi: ctfAbi } as const
 // Explicit gas so MetaMask skips eth_estimateGas on the rate-limited public RPC.
@@ -54,10 +54,14 @@ function TxStatus({ hash, error, pending, success }: { hash?: `0x${string}`; err
 export function ChallengeList() {
   const { address } = useAccount()
   const onchain = useReadContracts({
-    contracts: challenges.map((c) => ({ ...ctf, functionName: 'challenges', args: [BigInt(c.id)] })),
+    contracts: IDS.map((id) => ({ ...ctf, functionName: 'challenges', args: [BigInt(id)] })),
   })
+  type Row = readonly [string, number, number, string, bigint]
+  const rows = IDS.map((id, i) => ({ id, row: onchain.data?.[i]?.result as Row | undefined }))
+  // JSON challenges always show; on-chain-only ones show once created.
+  const shown = rows.filter(({ id, row }) => challenges.some((c) => c.id === id) || (row && row[0] !== '0x0000000000000000000000000000000000000000'))
   const mine = useReadContracts({
-    contracts: challenges.map((c) => ({ ...ctf, functionName: 'solved', args: [BigInt(c.id), address!] })),
+    contracts: shown.map(({ id }) => ({ ...ctf, functionName: 'solved', args: [BigInt(id), address!] })),
     query: { enabled: !!address },
   })
   const score = useReadContract({ ...ctf, functionName: 'score', args: [address!], query: { enabled: !!address } })
@@ -73,8 +77,8 @@ export function ChallengeList() {
         )}
       </div>
       <ol className="divide-y border-y">
-        {challenges.map((c, i) => {
-          const row = onchain.data?.[i]?.result as readonly [string, number, number, string, bigint] | undefined
+        {shown.map(({ id, row }, i) => {
+          const c = metaFor(id)
           const live = row && row[0] !== '0x0000000000000000000000000000000000000000'
           const done = mine.data?.[i]?.result === true
           return (
@@ -106,7 +110,7 @@ export function ChallengeList() {
 }
 
 export function ChallengeDetail({ id }: { id: number }) {
-  const c = challenges.find((x) => x.id === id)
+  const c = metaFor(id)
   const { address } = useAccount()
   const [flag, setFlag] = useState('')
   const [showHint, setShowHint] = useState(false)
@@ -114,7 +118,6 @@ export function ChallengeDetail({ id }: { id: number }) {
   const write = useWriteContract()
   const onchain = useReadContract({ ...ctf, functionName: 'challenges', args: [BigInt(id)] })
   const done = useReadContract({ ...ctf, functionName: 'solved', args: [BigInt(id), address!], query: { enabled: !!address } })
-  if (!c) return <p>No such challenge.</p>
   const live = !!onchain.data && onchain.data[0] !== '0x0000000000000000000000000000000000000000'
 
   async function submit(e: React.FormEvent) {
@@ -227,7 +230,8 @@ export function Admin() {
           <Input id="bounty" inputMode="decimal" value={bounty} onChange={(e) => setBounty(e.target.value)} placeholder="0" className="mt-1" />
           <p className="mt-1 text-xs text-muted-foreground">Escrowed in the contract. The first solver receives it minus a 5% platform fee.</p>
         </div>
-        <Button type="submit" disabled={!address || !id || !points || !flag || write.isPending}>Create challenge</Button>
+        {Number(id) > MAX_ID && <p className="text-sm text-destructive">Use an id from 1 to {MAX_ID}. Higher ids do not appear in the list.</p>}
+        <Button type="submit" disabled={!address || !id || Number(id) < 1 || Number(id) > MAX_ID || !points || !flag || write.isPending}>Create challenge</Button>
         <TxStatus hash={write.data} error={write.error} pending={write.isPending} success="Challenge created." />
       </form>
 

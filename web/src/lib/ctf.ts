@@ -26,6 +26,17 @@ export type ChallengeMeta = {
 }
 export const challenges = challengesJson as ChallengeMeta[]
 
+// ponytail: public RPCs cap eth_getLogs at 100 blocks, so the list probes ids 1..MAX_ID in one multicall
+// instead of replaying ChallengeCreated. Ids above this are invisible; store an id list in the contract to lift it.
+export const MAX_ID = 50
+export const IDS = Array.from({ length: MAX_ID }, (_, i) => i + 1)
+// On-chain challenge with no JSON entry still gets a page so its bounty can be claimed.
+export const metaFor = (id: number): ChallengeMeta =>
+  challenges.find((c) => c.id === id) ?? {
+    id, title: `Challenge #${id}`, category: 'custom', type: 'flag', points: 0,
+    text: 'The setter has not published a description for this challenge yet.', hints: [], files: [],
+  }
+
 // Flag never leaves the browser. key = keccak256(flag); contract stores only its address.
 const flagAccount = (flag: string) => privateKeyToAccount(keccak256(toBytes(flag.trim())))
 export const flagAddress = (flag: string) => flagAccount(flag).address
